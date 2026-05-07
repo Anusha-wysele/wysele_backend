@@ -34,7 +34,6 @@ def register_new_admin(
     user_in: UserCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(deps.get_current_super_admin)
 ):
     """
     Only SUPER_ADMIN can create a new admin.
@@ -56,7 +55,7 @@ def register_new_admin(
         role="ADMIN",
         company_id=user_in.company_id,
         is_active=True,
-        created_by_id=current_user.id
+        created_by_id=None
     )
 
     db.add(new_admin)
