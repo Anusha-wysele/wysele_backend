@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.staticfiles import StaticFiles
+import os
 from app.api.v1.api import api_router
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
@@ -67,6 +69,8 @@ app.add_middleware(LoggingMiddleware)
 @app.on_event("startup")
 def startup_event():
     Base.metadata.create_all(bind=engine)
+    os.makedirs("uploads/resumes", exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
     db = SessionLocal()
     try:
         init_db(db)

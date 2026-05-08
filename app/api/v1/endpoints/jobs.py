@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, Query, status, HTTPException
+from fastapi import APIRouter, Depends, Query, status, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-import os
+import os, shutil, uuid
 from app.api import deps
 from app.models.user import User
 from app.models.job import Job
@@ -93,13 +93,49 @@ def delete_job(
     job_service.delete_job(db, job_id, current_user.id, current_user.role == "SUPER_ADMIN")
 
 
-# POST /jobs/{id}/apply — Public (applicants)
+# POST /jobs/{id}/apply — Public (applicants), multipart form with resume file
 @router.post("/{job_id}/apply", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 def apply_for_job(
     job_id: int,
-    app_in: ApplicationCreate,
+    firstName: str,
+    lastName: str,
+    email: str,
+    mobileNumber: str,
+    currentLocation: str,
+    noticePeriod: str,
+    releventExperience: str,
+    resume: UploadFile = File(...),
+    region: str = None,
+    currentCtc: str = None,
+    expectedCtc: str = None,
     db: Session = Depends(deps.get_db)
 ):
+    # Validate file type
+    ext = os.path.splitext(resume.filename)[1].lower()
+    if ext not in (".pdf", ".docx"):
+        raise HTTPException(status_code=400, detail="Resume must be a PDF or DOCX file")
+
+    # Save file to uploads/resumes/
+    os.makedirs("uploads/resumes", exist_ok=True)
+    unique_filename = f"{uuid.uuid4().hex}_{resume.filename}"
+    file_path = os.path.join("uploads", "resumes", unique_filename)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(resume.file, buffer)
+
+    from app.schemas.application import ApplicationCreate
+    app_in = ApplicationCreate(
+        firstName=firstName,
+        lastName=lastName,
+        email=email,
+        mobileNumber=mobileNumber,
+        currentLocation=currentLocation,
+        noticePeriod=noticePeriod,
+        releventExperience=releventExperience,
+        resume=f"/{file_path}",
+        region=region,
+        currentCtc=currentCtc,
+        expectedCtc=expectedCtc
+    )
     return job_service.apply_for_job(db, job_id, app_in)
 
 
@@ -123,16 +159,15 @@ def download_resume(
     application = db.query(Application).filter(Application.id == application_id).first()
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
-    
-    resume_path = application.resume_url
-    
-    # If resume_url is a local file path
-    if os.path.exists(resume_path):
-        return FileResponse(
-            path=resume_path,
-            media_type="application/pdf",
-            filename=f"resume_{application.applicant_name}_{application_id}.pdf"
-        )
-    
-    # If resume_url is an external URL (S3, Cloudinary, etc.)
-    raise HTTPException(status_code=400, detail="Resume is hosted externally. Use the resume_url to download.")
+
+    resume_path = application.resume_url.lstrip("/")
+    abs_path = os.path.join(os.getcwd(), resume_path)
+
+    if not os.path.exists(abs_path):
+        raise HTTPException(status_code=404, detail="Resume file not found on server")
+
+    ext = os.path.splitext(abs_path)[1].lower()
+    media_type = "application/pdf" if ext == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    filename = f"resume_{application.first_name}_{application.last_name}_{application_id}{ext}"
+
+    return FileResponse(path=abs_path, media_type=media_type, filename=filename)

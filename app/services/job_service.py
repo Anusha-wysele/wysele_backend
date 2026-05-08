@@ -99,18 +99,24 @@ def apply_for_job(db: Session, job_id: int, app_in: ApplicationCreate) -> Applic
 
     existing = db.query(Application).filter(
         Application.job_id == job_id,
-        Application.applicant_email == app_in.email
+        Application.email == app_in.email
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="You have already applied for this job")
 
     application = Application(
         job_id=job_id,
-        applicant_name=app_in.name,
-        applicant_email=app_in.email,
-        applicant_phone=app_in.phoneNo,
-        resume_url=app_in.resume,
+        first_name=app_in.firstName,
+        last_name=app_in.lastName,
+        email=app_in.email,
+        mobile_number=app_in.mobileNumber,
+        current_location=app_in.currentLocation,
+        region=app_in.region,
+        current_ctc=app_in.currentCtc,
+        expected_ctc=app_in.expectedCtc,
         notice_period=app_in.noticePeriod,
+        relevant_experience=app_in.releventExperience,
+        resume_url=app_in.resume,
     )
     db.add(application)
     db.commit()
@@ -128,4 +134,4 @@ def get_all_applicants(db: Session) -> list:
 
 
 def get_applied_jobs(db: Session, email: str) -> list:
-    return db.query(Application).filter(Application.applicant_email == email).all()
+    return db.query(Application).filter(Application.email == email).all()
