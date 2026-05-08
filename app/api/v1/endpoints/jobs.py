@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, Query, status, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 import os, shutil, uuid
@@ -97,17 +97,17 @@ def delete_job(
 @router.post("/{job_id}/apply", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 def apply_for_job(
     job_id: int,
-    firstName: str,
-    lastName: str,
-    email: str,
-    mobileNumber: str,
-    currentLocation: str,
-    noticePeriod: str,
-    releventExperience: str,
+    firstName: str = Form(...),
+    lastName: str = Form(...),
+    email: str = Form(...),
+    mobileNumber: str = Form(...),
+    currentLocation: str = Form(...),
+    noticePeriod: str = Form(...),
+    releventExperience: str = Form(...),
     resume: UploadFile = File(...),
-    region: str = None,
-    currentCtc: str = None,
-    expectedCtc: str = None,
+    region: str = Form(None),
+    currentCtc: str = Form(None),
+    expectedCtc: str = Form(None),
     db: Session = Depends(deps.get_db)
 ):
     # Validate file type
