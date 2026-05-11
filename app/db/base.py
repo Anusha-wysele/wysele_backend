@@ -6,3 +6,5 @@ from app.models.contact import ContactInquiry  # noqa
 from app.models.blog import Blog  # noqa
 from app.models.job import Job  # noqa
 from app.models.application import Application  # noqa
+from app.models.consulting import ConsultingInquiry  # noqa
+from app.models.email_verification import EmailVerification  # noqa

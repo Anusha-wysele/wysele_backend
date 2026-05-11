@@ -1,97 +1,75 @@
-from fastapi import APIRouter, Depends, Query, status, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, Query, status, HTTPException, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.orm import Session
 import base64
+import random
+import string
+from datetime import datetime, timedelta, timezone
 from app.api import deps
 from app.models.job import Job
 from app.models.application import Application
+from app.models.email_verification import EmailVerification
 from app.schemas.job import JobCreate, JobUpdate, JobResponse
 from app.schemas.application import ApplicationCreate, ApplicationResponse
+from app.schemas.consulting import OTPRequest, OTPVerify
 from app.schemas.pagination import PaginatedResponse, paginate
 from app.services import job_service
+from app.services.email_service import send_otp_email
 from typing import List
 
 router = APIRouter()
 
-
-# POST /jobs — Public
-@router.post("/", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
-def create_job(
-    job_in: JobCreate,
-    db: Session = Depends(deps.get_db)
-):
-    return job_service.create_job(db, job_in, posted_by=1)
+PURPOSE = "job_application"
 
 
-# GET /jobs/search — Public search by role, region, skills, experience
-@router.get("/search", response_model=PaginatedResponse[JobResponse])
-def search_jobs(
-    db: Session = Depends(deps.get_db),
-    role: str = Query(default=None),
-    region: str = Query(default=None),
-    location: str = Query(default=None),
-    skills: str = Query(default=None, description="Comma separated skills e.g. Python,FastAPI"),
-    experience: str = Query(default=None),
-    page: int = Query(default=1, ge=1),
-    limit: int = Query(default=10, ge=1, le=100)
-):
-    query = db.query(Job).filter(Job.is_deleted == False, Job.status == "ACTIVE")
-
-    if role:
-        query = query.filter(Job.role.ilike(f"%{role}%"))
-    if region:
-        query = query.filter(Job.region.ilike(f"%{region}%"))
-    if location:
-        query = query.filter(Job.location.ilike(f"%{location}%"))
-    if experience:
-        query = query.filter(Job.experience.ilike(f"%{experience}%"))
-    if skills:
-        for skill in [s.strip() for s in skills.split(",")]:
-            query = query.filter(Job.key_skills.any(skill))
-
-    query = query.order_by(Job.created_at.desc())
-    return paginate(query, page, limit)
+def _generate_otp() -> str:
+    return "".join(random.choices(string.digits, k=6))
 
 
-# GET /jobs — Public (paginated, with optional category filter)
-@router.get("/", response_model=PaginatedResponse[JobResponse])
-def get_jobs(
-    db: Session = Depends(deps.get_db),
-    page: int = Query(default=1, ge=1),
-    limit: int = Query(default=10, ge=1, le=100)
-):
-    query = db.query(Job).filter(Job.is_deleted == False).order_by(Job.created_at.desc())
-    return paginate(query, page, limit)
+# POST /jobs/send-otp — Step 1
+@router.post("/send-otp")
+def send_application_otp(body: OTPRequest, background_tasks: BackgroundTasks, db: Session = Depends(deps.get_db)):
+    otp = _generate_otp()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    db.query(EmailVerification).filter(
+        EmailVerification.email == body.email,
+        EmailVerification.purpose == PURPOSE,
+        EmailVerification.is_verified == False
+    ).delete()
+    db.commit()
+
+    db.add(EmailVerification(email=body.email, otp=otp, purpose=PURPOSE, is_verified=False, expires_at=expires_at))
+    db.commit()
+
+    background_tasks.add_task(send_otp_email, email_to=body.email, otp=otp, purpose=PURPOSE)
+    return {"message": "OTP sent to your email. It expires in 10 minutes."}
 
 
-# GET /jobs/{id} — Public
-@router.get("/{job_id}", response_model=JobResponse)
-def get_job(job_id: int, db: Session = Depends(deps.get_db)):
-    return job_service.get_job_by_id(db, job_id)
+# POST /jobs/verify-otp — Step 2
+@router.post("/verify-otp")
+def verify_application_otp(body: OTPVerify, db: Session = Depends(deps.get_db)):
+    record = db.query(EmailVerification).filter(
+        EmailVerification.email == body.email,
+        EmailVerification.purpose == PURPOSE,
+        EmailVerification.is_verified == False,
+    ).order_by(EmailVerification.created_at.desc()).first()
+
+    if not record:
+        raise HTTPException(status_code=400, detail="No pending OTP found for this email")
+    if datetime.now(timezone.utc) > record.expires_at:
+        raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one")
+    if record.otp != body.otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+
+    record.is_verified = True
+    db.commit()
+    return {"message": "Email verified successfully."}
 
 
-# PUT /jobs/{id} — Public
-@router.put("/{job_id}", response_model=JobResponse)
-def update_job(
-    job_id: int,
-    job_in: JobUpdate,
-    db: Session = Depends(deps.get_db)
-):
-    return job_service.update_job(db, job_id, job_in, current_user_id=1, is_super_admin=True)
-
-
-# DELETE /jobs/{id} — Public, soft delete
-@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_job(
-    job_id: int,
-    db: Session = Depends(deps.get_db)
-):
-    job_service.delete_job(db, job_id, current_user_id=1, is_super_admin=True)
-
-
-# POST /jobs/{id}/apply — Public (applicants), multipart form with resume file
-@router.post("/{job_id}/apply", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
+# POST /jobs/apply — Step 3 (job_id as form field)
+@router.post("/apply", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 def apply_for_job(
-    job_id: int,
+    job_id: int = Form(...),
     firstName: str = Form(...),
     lastName: str = Form(...),
     email: str = Form(...),
@@ -105,6 +83,15 @@ def apply_for_job(
     expectedCtc: str = Form(None),
     db: Session = Depends(deps.get_db)
 ):
+    verified = db.query(EmailVerification).filter(
+        EmailVerification.email == email,
+        EmailVerification.purpose == PURPOSE,
+        EmailVerification.is_verified == True,
+    ).order_by(EmailVerification.created_at.desc()).first()
+
+    if not verified:
+        raise HTTPException(status_code=403, detail="Email not verified. Please verify your email before applying")
+
     ext = resume.filename.rsplit(".", 1)[-1].lower() if "." in resume.filename else ""
     if ext not in ("pdf", "docx"):
         raise HTTPException(status_code=400, detail="Resume must be a PDF or DOCX file")
@@ -113,7 +100,6 @@ def apply_for_job(
     encoded = base64.b64encode(content).decode()
     resume_data_url = f"data:application/{ext};base64,{encoded}"
 
-    from app.schemas.application import ApplicationCreate
     app_in = ApplicationCreate(
         firstName=firstName,
         lastName=lastName,
@@ -125,16 +111,78 @@ def apply_for_job(
         resume=resume_data_url,
         region=region,
         currentCtc=currentCtc,
-        expectedCtc=expectedCtc
+        expectedCtc=expectedCtc,
     )
-    return job_service.apply_for_job(db, job_id, app_in)
+    result = job_service.apply_for_job(db, job_id, app_in)
+    db.delete(verified)
+    db.commit()
+    return result
 
 
-# GET /jobs/{id}/applications — Public
-@router.get("/{job_id}/applications", response_model=List[ApplicationResponse])
-def get_job_applications(
-    job_id: int,
-    db: Session = Depends(deps.get_db)
+# POST /jobs — Create job
+@router.post("/", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
+def create_job(job_in: JobCreate, db: Session = Depends(deps.get_db)):
+    return job_service.create_job(db, job_in, posted_by=1)
+
+
+# GET /jobs/search
+@router.get("/search", response_model=PaginatedResponse[JobResponse])
+def search_jobs(
+    db: Session = Depends(deps.get_db),
+    role: str = Query(default=None),
+    region: str = Query(default=None),
+    location: str = Query(default=None),
+    skills: str = Query(default=None, description="Comma separated skills e.g. Python,FastAPI"),
+    experience: str = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=10, ge=1, le=100)
 ):
-    return job_service.get_applicants_for_job(db, job_id)
+    query = db.query(Job).filter(Job.is_deleted == False, Job.status == "ACTIVE")
+    if role:
+        query = query.filter(Job.role.ilike(f"%{role}%"))
+    if region:
+        query = query.filter(Job.region.ilike(f"%{region}%"))
+    if location:
+        query = query.filter(Job.location.ilike(f"%{location}%"))
+    if experience:
+        query = query.filter(Job.experience.ilike(f"%{experience}%"))
+    if skills:
+        for skill in [s.strip() for s in skills.split(",")]:
+            query = query.filter(Job.key_skills.any(skill))
+    query = query.order_by(Job.created_at.desc())
+    return paginate(query, page, limit)
 
+
+# GET /jobs
+@router.get("/", response_model=PaginatedResponse[JobResponse])
+def get_jobs(
+    db: Session = Depends(deps.get_db),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=10, ge=1, le=100)
+):
+    query = db.query(Job).filter(Job.is_deleted == False).order_by(Job.created_at.desc())
+    return paginate(query, page, limit)
+
+
+# GET /jobs/{id}
+@router.get("/{job_id}", response_model=JobResponse)
+def get_job(job_id: int, db: Session = Depends(deps.get_db)):
+    return job_service.get_job_by_id(db, job_id)
+
+
+# PUT /jobs/{id}
+@router.put("/{job_id}", response_model=JobResponse)
+def update_job(job_id: int, job_in: JobUpdate, db: Session = Depends(deps.get_db)):
+    return job_service.update_job(db, job_id, job_in, current_user_id=1, is_super_admin=True)
+
+
+# DELETE /jobs/{id}
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_job(job_id: int, db: Session = Depends(deps.get_db)):
+    job_service.delete_job(db, job_id, current_user_id=1, is_super_admin=True)
+
+
+# GET /jobs/{id}/applications
+@router.get("/{job_id}/applications", response_model=List[ApplicationResponse])
+def get_job_applications(job_id: int, db: Session = Depends(deps.get_db)):
+    return job_service.get_applicants_for_job(db, job_id)

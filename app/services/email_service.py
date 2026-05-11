@@ -51,6 +51,35 @@ def send_new_account_email(email_to: str, username: str, password: str):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
+def send_otp_email(email_to: str, otp: str, purpose: str):
+    label = "Consulting Form" if purpose == "consulting" else "Job Application"
+    subject = f"Wysele - Email Verification OTP for {label}"
+    html_content = f"""
+    <html>
+        <body>
+            <h2>Email Verification</h2>
+            <p>Use the OTP below to verify your email for your <b>{label}</b>.</p>
+            <h1 style="letter-spacing: 8px; color: #007bff;">{otp}</h1>
+            <p>This OTP expires in <b>10 minutes</b>. Do not share it with anyone.</p>
+            <p>If you did not request this, ignore this email.</p>
+            <p>Regards,<br>Wysele System Team</p>
+        </body>
+    </html>
+    """
+    message = MIMEMultipart("alternative")
+    message["Subject"] = subject
+    message["From"] = settings.EMAILS_FROM_EMAIL
+    message["To"] = email_to
+    message.attach(MIMEText(html_content, "html"))
+    try:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.send_message(message)
+    except Exception as e:
+        print(f"Failed to send OTP email: {e}")
+
+
 def send_password_reset_email(email_to: str, reset_token: str):
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
     subject = "Wysele - Password Reset Request"
