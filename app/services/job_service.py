@@ -5,6 +5,8 @@ from app.models.job import Job
 from app.models.application import Application
 from app.schemas.job import JobCreate, JobUpdate
 from app.schemas.application import ApplicationCreate
+from app.services.email_service import send_application_confirmation_email
+import threading
 
 
 def auto_close_expired(job: Job) -> Job:
@@ -121,6 +123,13 @@ def apply_for_job(db: Session, job_id: int, app_in: ApplicationCreate) -> Applic
     db.add(application)
     db.commit()
     db.refresh(application)
+
+    # Send confirmation email in background so it doesn't slow down the response
+    threading.Thread(
+        target=send_application_confirmation_email,
+        args=(application.email, application.first_name, job.job_code, job.role)
+    ).start()
+
     return application
 
 

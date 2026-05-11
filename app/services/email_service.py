@@ -80,6 +80,44 @@ def send_otp_email(email_to: str, otp: str, purpose: str):
         print(f"Failed to send OTP email: {e}")
 
 
+def send_application_confirmation_email(email_to: str, first_name: str, job_code: str, role: str):
+    subject = f"Application Received - {job_code}"
+    html_content = f"""
+    <html>
+        <body>
+            <h2>Application Received!</h2>
+            <p>Hi <b>{first_name}</b>,</p>
+            <p>Thank you for applying. We have received your application for the following position:</p>
+            <table style="border-collapse: collapse; width: 100%;">
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #ddd;"><b>Job Code</b></td>
+                    <td style="padding: 8px; border: 1px solid #ddd;">{job_code}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #ddd;"><b>Role</b></td>
+                    <td style="padding: 8px; border: 1px solid #ddd;">{role}</td>
+                </tr>
+            </table>
+            <br>
+            <p>Our team will review your application and get back to you shortly.</p>
+            <p>Regards,<br>Wysele Recruitment Team</p>
+        </body>
+    </html>
+    """
+    message = MIMEMultipart("alternative")
+    message["Subject"] = subject
+    message["From"] = settings.EMAILS_FROM_EMAIL
+    message["To"] = email_to
+    message.attach(MIMEText(html_content, "html"))
+    try:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.send_message(message)
+    except Exception as e:
+        print(f"Failed to send application confirmation email: {e}")
+
+
 def send_password_reset_email(email_to: str, reset_token: str):
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
     subject = "Wysele - Password Reset Request"
