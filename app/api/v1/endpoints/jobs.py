@@ -49,21 +49,19 @@ def send_application_otp(body: OTPRequest, background_tasks: BackgroundTasks, db
 @router.post("/verify-otp")
 def verify_application_otp(body: OTPVerify, db: Session = Depends(deps.get_db)):
     record = db.query(EmailVerification).filter(
-        EmailVerification.email == body.email,
         EmailVerification.purpose == PURPOSE,
         EmailVerification.is_verified == False,
+        EmailVerification.otp == body.otp
     ).order_by(EmailVerification.created_at.desc()).first()
 
     if not record:
-        raise HTTPException(status_code=400, detail="No pending OTP found for this email")
+        raise HTTPException(status_code=400, detail="Invalid OTP")
     if datetime.now(timezone.utc) > record.expires_at:
         raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one")
-    if record.otp != body.otp:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
 
     record.is_verified = True
     db.commit()
-    return {"message": "Email verified successfully."}
+    return {"message": "Email verified successfully.", "email": record.email}
 
 
 # POST /jobs/apply — Step 3 (job_id as form field)
