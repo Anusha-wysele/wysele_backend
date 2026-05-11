@@ -1,8 +1,7 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.staticfiles import StaticFiles
-import os
 from app.api.v1.api import api_router
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
@@ -19,12 +18,23 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        init_db(db)
+    finally:
+        db.close()
+    yield
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     debug=settings.DEBUG,
     docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
     redoc_url="/redoc" if settings.ENVIRONMENT != "production" else None,
+    lifespan=lifespan,
 )
 
 def custom_openapi():
@@ -65,19 +75,7 @@ app.add_middleware(RateLimitMiddleware)
 # 5. LOGGING
 app.add_middleware(LoggingMiddleware)
 
-# 4. INITIALIZATION: Create tables and seed root admin on startup
-@app.on_event("startup")
-def startup_event():
-    Base.metadata.create_all(bind=engine)
-    os.makedirs("uploads/resumes", exist_ok=True)
-    app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-    db = SessionLocal()
-    try:
-        init_db(db)
-    finally:
-        db.close()
-
-# 5. ROUTING: Main API endpoints
+# ROUTING: Main API endpoints
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.exception_handler(SQLAlchemyError)

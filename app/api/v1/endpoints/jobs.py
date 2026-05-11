@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Query, status, HTTPException, UploadFile, File, Form
-from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-import os, shutil, uuid
+import base64, uuid
 from app.api import deps
 from app.models.user import User
 from app.models.job import Job
@@ -110,17 +109,13 @@ def apply_for_job(
     expectedCtc: str = Form(None),
     db: Session = Depends(deps.get_db)
 ):
-    # Validate file type
-    ext = os.path.splitext(resume.filename)[1].lower()
-    if ext not in (".pdf", ".docx"):
+    ext = resume.filename.rsplit(".", 1)[-1].lower() if "." in resume.filename else ""
+    if ext not in ("pdf", "docx"):
         raise HTTPException(status_code=400, detail="Resume must be a PDF or DOCX file")
 
-    # Save file to uploads/resumes/
-    os.makedirs("uploads/resumes", exist_ok=True)
-    unique_filename = f"{uuid.uuid4().hex}_{resume.filename}"
-    file_path = os.path.join("uploads", "resumes", unique_filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(resume.file, buffer)
+    content = resume.file.read()
+    encoded = base64.b64encode(content).decode()
+    resume_data_url = f"data:application/{ext};base64,{encoded}"
 
     from app.schemas.application import ApplicationCreate
     app_in = ApplicationCreate(
@@ -131,7 +126,7 @@ def apply_for_job(
         currentLocation=currentLocation,
         noticePeriod=noticePeriod,
         releventExperience=releventExperience,
-        resume=f"/{file_path}",
+        resume=resume_data_url,
         region=region,
         currentCtc=currentCtc,
         expectedCtc=expectedCtc
@@ -148,26 +143,3 @@ def get_job_applications(
 ):
     return job_service.get_applicants_for_job(db, job_id)
 
-
-# GET /jobs/applications/{application_id}/resume — Admin or HR download resume
-@router.get("/applications/{application_id}/resume")
-def download_resume(
-    application_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_hr_or_admin)
-):
-    application = db.query(Application).filter(Application.id == application_id).first()
-    if not application:
-        raise HTTPException(status_code=404, detail="Application not found")
-
-    resume_path = application.resume_url.lstrip("/")
-    abs_path = os.path.join(os.getcwd(), resume_path)
-
-    if not os.path.exists(abs_path):
-        raise HTTPException(status_code=404, detail="Resume file not found on server")
-
-    ext = os.path.splitext(abs_path)[1].lower()
-    media_type = "application/pdf" if ext == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    filename = f"resume_{application.first_name}_{application.last_name}_{application_id}{ext}"
-
-    return FileResponse(path=abs_path, media_type=media_type, filename=filename)
