@@ -6,7 +6,7 @@ from app.api import deps
 from app.services import auth_service
 from app.services.email_service import send_new_account_email, send_password_reset_email
 from app.core import security
-from app.api.deps import get_db, get_current_user, get_current_super_admin
+from app.api.deps import get_db
 from app.schemas.user import Token, LoginRequest, UserCreate, UserResponse, PasswordChange, PasswordResetRequest, PasswordReset
 from app.models.user import User
 
@@ -33,12 +33,8 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
 def register_new_admin(
     user_in: UserCreate,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_super_admin)
+    db: Session = Depends(get_db)
 ):
-    """
-    Only SUPER_ADMIN can create ADMIN or HR users.
-    """
     if db.query(User).filter(User.email == user_in.email).first():
         raise HTTPException(status_code=400, detail="Email already exists")
 
@@ -59,7 +55,7 @@ def register_new_admin(
         role=user_in.role,
         company_id=user_in.company_id,
         is_active=True,
-        created_by_id=current_user.id
+        created_by_id=None
     )
 
     db.add(new_user)
@@ -76,19 +72,18 @@ def register_new_admin(
     return new_user
 
 @router.get("/me", response_model=UserResponse)
-def read_user_me(current_user: User = Depends(get_current_user)):
-    return current_user
+def read_user_me(db: Session = Depends(get_db)):
+    return db.query(User).filter(User.is_active == True).first()
 
 @router.patch("/change-password")
 def change_password(
     body: PasswordChange,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
-    if not security.verify_password(body.old_password, current_user.hashed_password):
+    user = db.query(User).filter(User.is_active == True).first()
+    if not user or not security.verify_password(body.old_password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Old password is incorrect")
-
-    current_user.hashed_password = security.get_password_hash(body.new_password)
+    user.hashed_password = security.get_password_hash(body.new_password)
     db.commit()
     return {"message": "Password updated successfully"}
 

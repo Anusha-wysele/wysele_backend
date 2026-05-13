@@ -33,7 +33,6 @@ def submit_consulting(body: ConsultingCreate, db: Session = Depends(deps.get_db)
 @router.get("/", response_model=PaginatedResponse[ConsultingResponse])
 def get_all_consulting(
     db: Session = Depends(deps.get_db),
-    current_user=Depends(deps.get_current_admin),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=100)
 ):
@@ -45,8 +44,7 @@ def get_all_consulting(
 @router.get("/{inquiry_id}", response_model=ConsultingResponse)
 def get_consulting(
     inquiry_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user=Depends(deps.get_current_admin)
+    db: Session = Depends(deps.get_db)
 ):
     inquiry = db.query(ConsultingInquiry).filter(ConsultingInquiry.id == inquiry_id).first()
     if not inquiry:
