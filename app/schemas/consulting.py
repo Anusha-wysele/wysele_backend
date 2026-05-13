@@ -1,6 +1,12 @@
 import re
+from typing import Optional
 from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
 from datetime import datetime
+
+PERSONAL_DOMAINS = {
+    "gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
+    "icloud.com", "aol.com", "protonmail.com", "mail.com"
+}
 
 
 class OTPRequest(BaseModel):
@@ -17,8 +23,15 @@ class ConsultingCreate(BaseModel):
     email: EmailStr
     mobile_number: str
     company_name: str
-    department: str
-    message: str
+    message: Optional[str] = None
+
+    @field_validator("email")
+    @classmethod
+    def validate_business_email(cls, v: str) -> str:
+        domain = v.split("@")[-1].lower()
+        if domain in PERSONAL_DOMAINS:
+            raise ValueError("Please use a business email address")
+        return v
 
     @field_validator("mobile_number")
     @classmethod
@@ -36,6 +49,5 @@ class ConsultingResponse(BaseModel):
     email: str
     mobile_number: str
     company_name: str
-    department: str
-    message: str
+    message: Optional[str]
     created_at: datetime

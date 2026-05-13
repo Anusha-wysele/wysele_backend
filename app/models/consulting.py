@@ -11,6 +11,5 @@ class ConsultingInquiry(Base):
     email = Column(String, nullable=False, index=True)
     mobile_number = Column(String, nullable=False)
     company_name = Column(String, nullable=False)
-    department = Column(String, nullable=False)
-    message = Column(Text, nullable=False)
+    message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

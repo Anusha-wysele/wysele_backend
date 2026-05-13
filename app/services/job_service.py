@@ -26,6 +26,7 @@ def create_job(db: Session, job_in: JobCreate, posted_by: int) -> Job:
         job_posted_date=job_in.jobPostedDate,
         job_type=job_in.jobType,
         key_skills=job_in.keySkills,
+        responsibilities=job_in.responsibilities,
         last_date_to_apply=job_in.lastDateToApply,
         location=job_in.location,
         region=job_in.region,
@@ -73,6 +74,7 @@ def update_job(db: Session, job_id: int, job_in: JobUpdate, current_user_id: int
         "jobType": "job_type",
         "keySkills": "key_skills",
         "lastDateToApply": "last_date_to_apply",
+        "responsibilities": "responsibilities",
     }
     for key, value in data.items():
         setattr(job, field_map.get(key, key), value)

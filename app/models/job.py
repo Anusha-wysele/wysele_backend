@@ -15,6 +15,7 @@ class Job(Base):
     job_posted_date = Column(Date, nullable=False)
     job_type = Column(String, nullable=False)
     key_skills = Column(ARRAY(String), nullable=False)
+    responsibilities = Column(ARRAY(String), nullable=True)
     last_date_to_apply = Column(Date, nullable=False)
     location = Column(String, nullable=False)
     region = Column(String, nullable=False)

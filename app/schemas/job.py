@@ -10,6 +10,7 @@ class JobCreate(BaseModel):
     jobPostedDate: date
     jobType: str
     keySkills: List[str] = Field(..., min_length=1)
+    responsibilities: Optional[List[str]] = None
     lastDateToApply: date
     location: str
     region: str
@@ -22,6 +23,7 @@ class JobUpdate(BaseModel):
     experience: Optional[str] = None
     jobType: Optional[str] = None
     keySkills: Optional[List[str]] = None
+    responsibilities: Optional[List[str]] = None
     lastDateToApply: Optional[date] = None
     location: Optional[str] = None
     region: Optional[str] = None
@@ -39,6 +41,7 @@ class JobResponse(BaseModel):
     job_posted_date: date
     job_type: str
     key_skills: List[str]
+    responsibilities: Optional[List[str]]
     last_date_to_apply: date
     location: str
     region: str
