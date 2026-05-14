@@ -77,3 +77,45 @@ def get_current_hr_or_admin(
             detail="HR or Admin privileges required",
         )
     return current_user
+
+def require_can_post_blog(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role == "SUPER_ADMIN":
+        return current_user
+    if not current_user.can_post_blog:
+        raise HTTPException(status_code=403, detail="You do not have permission to post blogs")
+    return current_user
+
+def require_can_edit_blog(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role == "SUPER_ADMIN":
+        return current_user
+    if not current_user.can_edit_blog:
+        raise HTTPException(status_code=403, detail="You do not have permission to edit blogs")
+    return current_user
+
+def require_can_delete_blog(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role == "SUPER_ADMIN":
+        return current_user
+    if not current_user.can_delete_blog:
+        raise HTTPException(status_code=403, detail="You do not have permission to delete blogs")
+    return current_user
+
+def require_can_post_job(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role == "SUPER_ADMIN":
+        return current_user
+    if not current_user.can_post_job:
+        raise HTTPException(status_code=403, detail="You do not have permission to post jobs")
+    return current_user
+
+def require_can_access_contact(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role == "SUPER_ADMIN":
+        return current_user
+    if not current_user.can_access_contact:
+        raise HTTPException(status_code=403, detail="You do not have permission to access contacts")
+    return current_user
+
+def require_can_access_consulting(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role == "SUPER_ADMIN":
+        return current_user
+    if not current_user.can_access_consulting:
+        raise HTTPException(status_code=403, detail="You do not have permission to access consulting")
+    return current_user

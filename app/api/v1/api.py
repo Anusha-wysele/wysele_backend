@@ -1,5 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from app.api.v1.endpoints import auth, blogs, admins, contact, jobs, consulting
+from app.api import deps
 
 api_router = APIRouter()
 

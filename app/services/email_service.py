@@ -4,45 +4,32 @@ from email.mime.multipart import MIMEMultipart
 from app.core.config import settings
 
 def send_new_account_email(email_to: str, username: str, password: str):
-    # This should be your frontend URL (e.g., https://wysele.com/login)
     login_url = f"{settings.FRONTEND_URL}/login"
-    
-    subject = "Welcome to Wysele - Your Admin Account is Ready"
-    
-    # 1. Create the HTML version (Clickable)
+    subject = "Welcome to Wysele - Your Account is Ready"
     html_content = f"""
     <html>
         <body>
             <h2>Welcome to Wysele!</h2>
-            <p>A new administrator account has been created for you.</p>
-            <p><b>Login Details:</b></p>
+            <p>Your account has been created. Here are your login credentials:</p>
             <ul>
-                <li><b>Username:</b> {username}</li>
-                <li><b>Password:</b> {password}</li>
+                <li><b>Email:</b> {username}</li>
+                <li><b>Temporary Password:</b> <code style="font-size:16px;">{password}</code></li>
             </ul>
-            <p>Please click the button below to log in and change your password:</p>
-            <a href="{login_url}" 
+            <p><b>Important:</b> You will be required to change your password on first login.</p>
+            <a href="{login_url}"
                style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-               Login to Dashboard
+               Login Now
             </a>
             <br><br>
-            <p>If the button doesn't work, copy and paste this link: {login_url}</p>
             <p>Regards,<br>Wysele System Team</p>
         </body>
     </html>
     """
-
-    # 2. Setup the Email Message
     message = MIMEMultipart("alternative")
     message["Subject"] = subject
     message["From"] = settings.EMAILS_FROM_EMAIL
     message["To"] = email_to
-
-    # Add the HTML content to the email
-    part = MIMEText(html_content, "html")
-    message.attach(part)
-
-    # 3. Send via SMTP
+    message.attach(MIMEText(html_content, "html"))
     try:
         with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
             server.starttls()

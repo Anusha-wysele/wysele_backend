@@ -13,25 +13,30 @@ class User(Base):
     middle_name = Column(String, nullable=True)
     last_name = Column(String, nullable=False)
     phone_number = Column(String, nullable=True)
-    
+
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
-    role = Column(String, default="ADMIN") 
-    
-    # 1. This is now just a string, NO ForeignKey here
-    company_id = Column(String, nullable=True) 
-    
-    # --- DELETE OR COMMENT OUT THESE TWO LINES BELOW ---
-    # company = relationship("Company", back_populates="users") 
-    # ----------------------------------------------------
+    is_first_login = Column(Boolean, default=True)
+    role = Column(String, default="ADMIN")
 
-    can_post_blog = Column(Boolean, default=True)
-    can_edit_blog = Column(Boolean, default=True)
+    company_id = Column(String, nullable=True)
+
+    # Blog permissions
+    can_post_blog = Column(Boolean, default=False)
+    can_edit_blog = Column(Boolean, default=False)
+    can_delete_blog = Column(Boolean, default=False)
+
+    # HR permissions
+    can_post_job = Column(Boolean, default=False)
+
+    # Admin access permissions
+    can_access_contact = Column(Boolean, default=False)
+    can_access_consulting = Column(Boolean, default=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     reset_token = Column(String, nullable=True)
     reset_token_expiry = Column(DateTime(timezone=True), nullable=True)
-    
+
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     creator = relationship("User", remote_side=[id], backref="created_users")

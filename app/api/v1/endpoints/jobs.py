@@ -8,9 +8,10 @@ from app.api import deps
 from app.models.job import Job
 from app.models.application import Application
 from app.models.email_verification import EmailVerification
+from app.models.user import User
 from app.schemas.job import JobCreate, JobUpdate, JobResponse
 from app.schemas.application import ApplicationCreate, ApplicationResponse
-from app.schemas.consulting import OTPRequest, OTPVerify
+from app.schemas.consulting import OTPRequest
 from app.schemas.pagination import PaginatedResponse, paginate
 from app.services import job_service
 from app.services.email_service import send_otp_email
@@ -25,7 +26,7 @@ def _generate_otp() -> str:
     return "".join(random.choices(string.digits, k=6))
 
 
-# POST /jobs/send-otp — Send OTP to email before applying
+# POST /jobs/send-otp — Public
 @router.post("/send-otp")
 def send_application_otp(body: OTPRequest, background_tasks: BackgroundTasks, db: Session = Depends(deps.get_db)):
     otp = _generate_otp()
@@ -45,7 +46,7 @@ def send_application_otp(body: OTPRequest, background_tasks: BackgroundTasks, db
     return {"message": "OTP sent to your email. It expires in 10 minutes."}
 
 
-# POST /jobs/apply — Submit full form, otp as separate query param
+# POST /jobs/apply — Public
 @router.post("/apply", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 def apply_for_job(
     otp: str = Query(..., description="OTP received on email"),
@@ -63,7 +64,6 @@ def apply_for_job(
     expectedCtc: str = Form(None),
     db: Session = Depends(deps.get_db)
 ):
-    # Verify OTP inline
     record = db.query(EmailVerification).filter(
         EmailVerification.email == email,
         EmailVerification.purpose == PURPOSE,
@@ -76,7 +76,6 @@ def apply_for_job(
     if datetime.now(timezone.utc) > record.expires_at:
         raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one")
 
-    # Validate resume file type
     ext = resume.filename.rsplit(".", 1)[-1].lower() if "." in resume.filename else ""
     if ext not in ("pdf", "docx"):
         raise HTTPException(status_code=400, detail="Resume must be a PDF or DOCX file")
@@ -99,27 +98,29 @@ def apply_for_job(
         expectedCtc=expectedCtc,
     )
     result = job_service.apply_for_job(db, job_id, app_in)
-
-    # Mark OTP as used
     db.delete(record)
     db.commit()
     return result
 
 
-# POST /jobs — Create job
+# POST /jobs — HR with can_post_job only
 @router.post("/", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
-def create_job(job_in: JobCreate, db: Session = Depends(deps.get_db)):
-    return job_service.create_job(db, job_in, posted_by=1)
+def create_job(
+    job_in: JobCreate,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.require_can_post_job)
+):
+    return job_service.create_job(db, job_in, current_user.id)
 
 
-# GET /jobs/search
+# GET /jobs/search — Public
 @router.get("/search", response_model=PaginatedResponse[JobResponse])
 def search_jobs(
     db: Session = Depends(deps.get_db),
     role: str = Query(default=None),
     region: str = Query(default=None),
     location: str = Query(default=None),
-    skills: str = Query(default=None, description="Comma separated skills e.g. Python,FastAPI"),
+    skills: str = Query(default=None, description="Comma separated e.g. Python,FastAPI"),
     experience: str = Query(default=None),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=100)
@@ -136,11 +137,10 @@ def search_jobs(
     if skills:
         for skill in [s.strip() for s in skills.split(",")]:
             query = query.filter(Job.key_skills.any(skill))
-    query = query.order_by(Job.created_at.desc())
-    return paginate(query, page, limit)
+    return paginate(query.order_by(Job.created_at.desc()), page, limit)
 
 
-# GET /jobs
+# GET /jobs — Public
 @router.get("/", response_model=PaginatedResponse[JobResponse])
 def get_jobs(
     db: Session = Depends(deps.get_db),
@@ -151,25 +151,38 @@ def get_jobs(
     return paginate(query, page, limit)
 
 
-# GET /jobs/{id}
+# GET /jobs/{id} — Public
 @router.get("/{job_id}", response_model=JobResponse)
 def get_job(job_id: int, db: Session = Depends(deps.get_db)):
     return job_service.get_job_by_id(db, job_id)
 
 
-# PUT /jobs/{id}
+# PUT /jobs/{id} — HR with can_post_job
 @router.put("/{job_id}", response_model=JobResponse)
-def update_job(job_id: int, job_in: JobUpdate, db: Session = Depends(deps.get_db)):
-    return job_service.update_job(db, job_id, job_in, current_user_id=1, is_super_admin=True)
+def update_job(
+    job_id: int,
+    job_in: JobUpdate,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.require_can_post_job)
+):
+    return job_service.update_job(db, job_id, job_in, current_user.id, current_user.role == "SUPER_ADMIN")
 
 
-# DELETE /jobs/{id}
+# DELETE /jobs/{id} — HR with can_post_job
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_job(job_id: int, db: Session = Depends(deps.get_db)):
-    job_service.delete_job(db, job_id, current_user_id=1, is_super_admin=True)
+def delete_job(
+    job_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.require_can_post_job)
+):
+    job_service.delete_job(db, job_id, current_user.id, current_user.role == "SUPER_ADMIN")
 
 
-# GET /jobs/{id}/applications
+# GET /jobs/{id}/applications — HR with can_post_job
 @router.get("/{job_id}/applications", response_model=List[ApplicationResponse])
-def get_job_applications(job_id: int, db: Session = Depends(deps.get_db)):
+def get_job_applications(
+    job_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.require_can_post_job)
+):
     return job_service.get_applicants_for_job(db, job_id)

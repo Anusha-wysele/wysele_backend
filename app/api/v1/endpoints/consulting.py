@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.api import deps
 from app.models.consulting import ConsultingInquiry
+from app.models.user import User
 from app.schemas.consulting import ConsultingCreate, ConsultingResponse
 from app.schemas.pagination import PaginatedResponse, paginate
 
@@ -11,7 +12,6 @@ router = APIRouter()
 # PUBLIC: Submit consulting inquiry
 @router.post("/submit", response_model=ConsultingResponse)
 def submit_consulting(body: ConsultingCreate, db: Session = Depends(deps.get_db)):
-    # Check submission limit — max 10 per email
     count = db.query(ConsultingInquiry).filter(ConsultingInquiry.email == body.email).count()
     if count >= 10:
         raise HTTPException(status_code=400, detail="You have reached the maximum limit of 10 submissions")
@@ -29,10 +29,11 @@ def submit_consulting(body: ConsultingCreate, db: Session = Depends(deps.get_db)
     return inquiry
 
 
-# ADMIN: Get all consulting submissions (paginated)
+# ADMIN with can_access_consulting permission
 @router.get("/", response_model=PaginatedResponse[ConsultingResponse])
 def get_all_consulting(
     db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.require_can_access_consulting),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=100)
 ):
@@ -40,11 +41,12 @@ def get_all_consulting(
     return paginate(query, page, limit)
 
 
-# ADMIN: Get single consulting submission
+# ADMIN with can_access_consulting permission
 @router.get("/{inquiry_id}", response_model=ConsultingResponse)
 def get_consulting(
     inquiry_id: int,
-    db: Session = Depends(deps.get_db)
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.require_can_access_consulting)
 ):
     inquiry = db.query(ConsultingInquiry).filter(ConsultingInquiry.id == inquiry_id).first()
     if not inquiry:

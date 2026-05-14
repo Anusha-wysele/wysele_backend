@@ -1,86 +1,88 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from app.api import deps
+from typing import List
+from app.api.deps import get_db, get_current_super_admin
 from app.models.user import User
-from app.schemas.user import UserResponse, UserUpdate
-from app.core import security
+from app.schemas.user import UserResponse, UserUpdate, PermissionsUpdate
 
 router = APIRouter()
 
-# --- 1. GET ALL ---
+
+# GET all admins and HRs
 @router.get("/", response_model=List[UserResponse])
-def read_admins(
-    db: Session = Depends(deps.get_db)
+def get_all_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
 ):
-    """
-    Returns the list of all admins with their permission statuses.
-    """
-    return db.query(User).filter(User.role == "ADMIN").order_by(User.created_at.desc()).all()
+    return db.query(User).filter(User.role.in_(["ADMIN", "HR"])).order_by(User.created_at.desc()).all()
 
-# --- 2. PUT / EDIT DETAILS ---
-@router.put("/{admin_id}", response_model=UserResponse)
-def update_admin(
-    admin_id: int,
+
+# GET single user
+@router.get("/{user_id}", response_model=UserResponse)
+def get_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+# UPDATE user details
+@router.put("/{user_id}", response_model=UserResponse)
+def update_user(
+    user_id: int,
     user_in: UserUpdate,
-    db: Session = Depends(deps.get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
 ):
-    """
-    Update admin Identity, Security, or Control flags.
-    """
-    admin = db.query(User).filter(User.id == admin_id).first()
-    if not admin:
-        raise HTTPException(status_code=404, detail="Admin not found")
-    
-    update_data = user_in.model_dump(exclude_unset=True)
-    
-    if "password" in update_data:
-        password = update_data.pop("password")
-        admin.hashed_password = security.get_password_hash(password)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    for field, value in update_data.items():
-        setattr(admin, field, value)
+    for field, value in user_in.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
 
     db.commit()
-    db.refresh(admin)
-    return admin
+    db.refresh(user)
+    return user
 
-# --- 4. PATCH / PERMISSIONS ---
-@router.patch("/{admin_id}/permissions", response_model=UserResponse)
-def update_admin_permissions(
-    admin_id: int,
-    can_post: Optional[bool] = None,
-    can_edit: Optional[bool] = None,
-    db: Session = Depends(deps.get_db)
+
+# PATCH permissions — control panel
+@router.patch("/{user_id}/permissions", response_model=UserResponse)
+def update_permissions(
+    user_id: int,
+    perms: PermissionsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
 ):
-    """
-    Specific endpoint to toggle an admin's ability to post or edit blogs.
-    """
-    admin = db.query(User).filter(User.id == admin_id).first()
-    if not admin:
-        raise HTTPException(status_code=404, detail="Admin not found")
-    
-    if can_post is not None:
-        admin.can_post_blog = can_post
-    if can_edit is not None:
-        admin.can_edit_blog = can_edit
-        
-    db.commit()
-    db.refresh(admin)
-    return admin
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-# --- 5. PATCH / STATUS ---
-@router.patch("/{admin_id}/status", response_model=UserResponse)
-def toggle_admin_status(
-    admin_id: int,
-    active_status: bool,
-    db: Session = Depends(deps.get_db)
+    for field, value in perms.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
+
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+# PATCH activate/deactivate
+@router.patch("/{user_id}/status", response_model=UserResponse)
+def toggle_status(
+    user_id: int,
+    is_active: bool,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
 ):
-    admin = db.query(User).filter(User.id == admin_id).first()
-    if not admin:
-        raise HTTPException(status_code=404, detail="Admin not found")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    admin.is_active = active_status
+    user.is_active = is_active
     db.commit()
-    db.refresh(admin)
-    return admin
+    db.refresh(user)
+    return user
