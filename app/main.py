@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.staticfiles import StaticFiles
 from app.api.v1.api import api_router
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
@@ -15,6 +17,7 @@ from fastapi.responses import JSONResponse
 from fastapi import Request
 from sqlalchemy.exc import SQLAlchemyError
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -66,13 +69,16 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_headers=["*"],
     )
 
-# 3. SECURITY HEADERS
+# 3. GZIP — compress responses > 1KB automatically
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# 4. SECURITY HEADERS
 app.add_middleware(SecurityHeadersMiddleware)
 
-# 4. RATE LIMITING
+# 5. RATE LIMITING
 app.add_middleware(RateLimitMiddleware)
 
-# 5. LOGGING
+# 6. LOGGING
 app.add_middleware(LoggingMiddleware)
 
 # ROUTING: Main API endpoints
