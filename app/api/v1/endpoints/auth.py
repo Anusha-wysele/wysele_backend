@@ -29,7 +29,7 @@ def login(credentials: LoginRequest, response: Response, db: Session = Depends(g
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account deactivated")
 
-    access_token = security.create_access_token(data={"sub": user.email})
+    access_token = security.create_access_token(data={"sub": str(user.id)})
     is_production = settings.ENVIRONMENT == "production"
 
     # Always set HttpOnly cookie
@@ -64,10 +64,12 @@ def register_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin)
 ):
-    if db.query(User).filter(User.email == user_in.email).first():
-        raise HTTPException(status_code=400, detail="Email already exists")
-
-    if db.query(User).filter(User.employee_id == user_in.employee_id).first():
+    existing = db.query(User.email, User.employee_id).filter(
+        (User.email == user_in.email) | (User.employee_id == user_in.employee_id)
+    ).first()
+    if existing:
+        if existing.email == user_in.email:
+            raise HTTPException(status_code=400, detail="Email already exists")
         raise HTTPException(status_code=400, detail="Employee ID already exists")
 
     # Generate random password — never exposed in API response

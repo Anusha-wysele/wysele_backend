@@ -7,6 +7,14 @@ from app.core.config import settings
 
 LOGO_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "Logo Dark.png")
 
+# Cache logo bytes at startup — avoid disk I/O on every email
+_LOGO_BYTES: bytes | None = None
+try:
+    with open(os.path.abspath(LOGO_PATH), "rb") as f:
+        _LOGO_BYTES = f.read()
+except Exception:
+    pass
+
 LOGO_FOOTER = """
     <br>
     <img src="cid:wysele_logo" alt="Wysele" style="height: 40px; margin-top: 10px;">
@@ -23,15 +31,11 @@ def _build_message(subject: str, email_to: str, html_content: str) -> MIMEMultip
     html_part.attach(MIMEText(html_content, "html"))
     message.attach(html_part)
 
-    # Attach logo as inline image
-    try:
-        with open(os.path.abspath(LOGO_PATH), "rb") as f:
-            logo = MIMEImage(f.read(), _subtype="png")
-            logo.add_header("Content-ID", "<wysele_logo>")
-            logo.add_header("Content-Disposition", "inline", filename="Logo Dark.png")
-            message.attach(logo)
-    except Exception:
-        pass  # If logo not found, email still sends without it
+    if _LOGO_BYTES:
+        logo = MIMEImage(_LOGO_BYTES, _subtype="png")
+        logo.add_header("Content-ID", "<wysele_logo>")
+        logo.add_header("Content-Disposition", "inline", filename="Logo Dark.png")
+        message.attach(logo)
 
     return message
 
