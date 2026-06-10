@@ -23,6 +23,9 @@ class Job(Base):
     salary = Column(String, nullable=True)
     status = Column(String, default="ACTIVE", nullable=False)
 
+    company_id = Column(String, index=True, nullable=True)
+    company_name = Column(String, nullable=True)
+
     posted_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     poster = relationship("User", foreign_keys=[posted_by])
 

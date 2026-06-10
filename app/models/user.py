@@ -13,6 +13,7 @@ class User(Base):
     middle_name = Column(String, nullable=True)
     last_name = Column(String, nullable=False)
     phone_number = Column(String, nullable=True)
+    name = Column(String, nullable=True)
 
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
@@ -20,6 +21,7 @@ class User(Base):
     role = Column(String, default="ADMIN")
 
     company_id = Column(String, nullable=True)
+    company_name = Column(String, nullable=True)
 
     # Blog permissions
     can_post_blog = Column(Boolean, default=False)
@@ -40,3 +42,11 @@ class User(Base):
 
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     creator = relationship("User", remote_side=[id], backref="created_users")
+
+    @property
+    def emp_id(self) -> str:
+        return self.employee_id
+
+    @emp_id.setter
+    def emp_id(self, value: str):
+        self.employee_id = value

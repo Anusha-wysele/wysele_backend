@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, Query, status, HTTPException, UploadFile, File, Form, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 import base64
 import random
@@ -103,17 +103,54 @@ def apply_for_job(
     return result
 
 
-# POST /jobs — HR with can_post_job only
+from app.services.audit_service import log_audit_event
+from typing import Optional, List
+
+# Helper to check user optional (distinguishes Candidate vs Admin Portal calls)
+async def get_current_user_optional(request: Request, db: Session = Depends(deps.get_db)) -> Optional[User]:
+    try:
+        return await deps.get_current_user(request, db)
+    except Exception:
+        return None
+
+
+# POST /jobs — Admin/Super Admin
 @router.post("/", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 def create_job(
     job_in: JobCreate,
+    request: Request,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.require_can_post_job)
+    current_user: User = Depends(deps.get_current_admin)
 ):
-    return job_service.create_job(db, job_in, current_user.id)
+    if current_user.role == "SUPER_ADMIN":
+        company_id = job_in.company_id or "WYSELE"
+        company_name = job_in.company_name or "WYSELE"
+    else:
+        company_id = current_user.company_id
+        company_name = current_user.company_name
+
+    job = job_service.create_job(
+        db, job_in, current_user.id, company_id=company_id, company_name=company_name
+    )
+
+    # Log job creation
+    log_audit_event(
+        db,
+        action="JOB_CREATION",
+        user_id=current_user.id,
+        email=current_user.email,
+        details={
+            "job_id": job.id,
+            "job_code": job.job_code,
+            "company_id": company_id,
+            "company_name": company_name
+        },
+        ip_address=request.client.host if request.client else None
+    )
+    return job
 
 
-# GET /jobs/search — Public
+# GET /jobs/search — Public search
 @router.get("/search", response_model=PaginatedResponse[JobResponse])
 def search_jobs(
     db: Session = Depends(deps.get_db),
@@ -140,49 +177,108 @@ def search_jobs(
     return paginate(query.order_by(Job.created_at.desc()), page, limit)
 
 
-# GET /jobs — Public
+# GET /jobs — Public Candidate or Multi-tenant Admin List
 @router.get("/", response_model=PaginatedResponse[JobResponse])
 def get_jobs(
     db: Session = Depends(deps.get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=10, ge=1, le=100)
+    limit: int = Query(default=10, ge=1, le=100),
+    company_id: Optional[str] = Query(default=None)
 ):
-    query = db.query(Job).filter(Job.is_deleted == False).order_by(Job.created_at.desc())
-    return paginate(query, page, limit)
+    query = db.query(Job).filter(Job.is_deleted == False)
+    if current_user:
+        # Authenticated Admin Portal view: restrict to own company jobs
+        if current_user.role == "SUPER_ADMIN":
+            if company_id:
+                query = query.filter(Job.company_id == company_id.upper())
+        else:
+            query = query.filter(Job.company_id == current_user.company_id)
+    else:
+        # Public Candidate list: view active jobs only
+        query = query.filter(Job.status == "ACTIVE")
+
+    return paginate(query.order_by(Job.created_at.desc()), page, limit)
 
 
-# GET /jobs/{id} — Public
+# GET /jobs/{id} — Public details
 @router.get("/{job_id}", response_model=JobResponse)
 def get_job(job_id: int, db: Session = Depends(deps.get_db)):
     return job_service.get_job_by_id(db, job_id)
 
 
-# PUT /jobs/{id} — HR with can_post_job
+# PUT /jobs/{id} — Admin/Super Admin
 @router.put("/{job_id}", response_model=JobResponse)
 def update_job(
     job_id: int,
     job_in: JobUpdate,
+    request: Request,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.require_can_post_job)
+    current_user: User = Depends(deps.get_current_admin)
 ):
-    return job_service.update_job(db, job_id, job_in, current_user.id, current_user.role == "SUPER_ADMIN")
+    job = job_service.get_job_by_id(db, job_id)
+    if current_user.role != "SUPER_ADMIN" and job.company_id != current_user.company_id:
+        raise HTTPException(status_code=403, detail="You can only edit jobs for your own company")
+
+    updated_job = job_service.update_job(db, job_id, job_in, current_user)
+
+    # Log job update
+    log_audit_event(
+        db,
+        action="JOB_UPDATE",
+        user_id=current_user.id,
+        email=current_user.email,
+        details={
+            "job_id": job_id,
+            "job_code": updated_job.job_code,
+            "company_id": updated_job.company_id
+        },
+        ip_address=request.client.host if request.client else None
+    )
+
+    return updated_job
 
 
-# DELETE /jobs/{id} — HR with can_post_job
+# DELETE /jobs/{id} — Admin/Super Admin
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_job(
     job_id: int,
+    request: Request,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.require_can_post_job)
+    current_user: User = Depends(deps.get_current_admin)
 ):
-    job_service.delete_job(db, job_id, current_user.id, current_user.role == "SUPER_ADMIN")
+    job = job_service.get_job_by_id(db, job_id)
+    if current_user.role != "SUPER_ADMIN" and job.company_id != current_user.company_id:
+        raise HTTPException(status_code=403, detail="You can only delete jobs for your own company")
+
+    job_service.delete_job(db, job_id, current_user)
+
+    # Log job deletion
+    log_audit_event(
+        db,
+        action="JOB_DELETION",
+        user_id=current_user.id,
+        email=current_user.email,
+        details={
+            "job_id": job_id,
+            "job_code": job.job_code,
+            "company_id": job.company_id
+        },
+        ip_address=request.client.host if request.client else None
+    )
 
 
-# GET /jobs/{id}/applications — HR with can_post_job
+# GET /jobs/{id}/applications — Admin/Super Admin
 @router.get("/{job_id}/applications", response_model=List[ApplicationResponse])
 def get_job_applications(
     job_id: int,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.require_can_post_job)
+    current_user: User = Depends(deps.get_current_admin)
 ):
+    job = job_service.get_job_by_id(db, job_id)
+    if current_user.role != "SUPER_ADMIN" and job.company_id != current_user.company_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only view applications for jobs belonging to your company"
+        )
     return job_service.get_applicants_for_job(db, job_id)

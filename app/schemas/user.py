@@ -1,5 +1,5 @@
 import re
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator, model_validator
 from typing import Optional
 from datetime import datetime
 
@@ -10,44 +10,64 @@ PERSONAL_DOMAINS = {
 
 
 class UserRegister(BaseModel):
-    employee_id: str = Field(..., description="Unique Employee ID (e.g., WYT0015)")
+    emp_id: str = Field(..., description="Unique Employee ID (e.g., WYT0015)")
     email: EmailStr
-    first_name: str = Field(..., min_length=1)
-    middle_name: Optional[str] = None
-    last_name: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1)
     phone_number: Optional[str] = None
-    company_id: Optional[str] = None
-    role: str = Field(..., description="ADMIN or HR")
+    company_name: str = Field(..., description="WYSELE, ORBINTIX, or GRACE VIRTUE")
+    role: str = Field(..., description="SUPER_ADMIN or ADMIN")
+    password: Optional[str] = None
+    is_active: bool = True
 
     @field_validator("email")
     @classmethod
     def validate_business_email(cls, v: str) -> str:
         domain = v.split("@")[-1].lower()
-        if domain in PERSONAL_DOMAINS:
-            raise ValueError("Please use a business email address")
+        allowed_domains = {"wysele.com", "orbintix.com", "gracevirtue.com"}
+        if domain not in allowed_domains:
+            raise ValueError("Email domain must be one of: @wysele.com, @orbintix.com, @gracevirtue.com")
         return v
 
     @field_validator("role")
     @classmethod
     def validate_role(cls, v: str) -> str:
-        if v not in ["ADMIN", "HR"]:
-            raise ValueError("Role must be ADMIN or HR")
+        if v not in ["SUPER_ADMIN", "ADMIN"]:
+            raise ValueError("Role must be SUPER_ADMIN or ADMIN")
         return v
+
+    @model_validator(mode="after")
+    def validate_email_company_match(self) -> "UserRegister":
+        email_domain = self.email.split("@")[-1].lower()
+        company = self.company_name.upper().replace("_", " ")
+        
+        expected_companies = {
+            "wysele.com": "WYSELE",
+            "orbintix.com": "ORBINTIX",
+            "gracevirtue.com": "GRACE VIRTUE"
+        }
+        
+        expected_comp = expected_companies.get(email_domain)
+        if expected_comp != company:
+            raise ValueError(f"Email domain '@{email_domain}' does not match company '{self.company_name}'")
+            
+        return self
 
 
 class UserBase(BaseModel):
-    employee_id: str
+    emp_id: str
     email: EmailStr
-    first_name: str
+    name: Optional[str] = None
+    first_name: Optional[str] = None
     middle_name: Optional[str] = None
-    last_name: str
+    last_name: Optional[str] = None
     phone_number: Optional[str] = None
     company_id: Optional[str] = None
+    company_name: Optional[str] = None
 
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8)
-    role: str = Field(..., description="Role must be ADMIN or HR")
+    role: str = Field(..., description="Role must be SUPER_ADMIN or ADMIN")
 
 
 class UserResponse(UserBase):
@@ -56,24 +76,26 @@ class UserResponse(UserBase):
     role: str
     is_active: bool
     is_first_login: bool
-    can_post_blog: bool
-    can_edit_blog: bool
-    can_delete_blog: bool
-    can_post_job: bool
-    can_access_contact: bool
-    can_access_consulting: bool
+    can_post_blog: bool = False
+    can_edit_blog: bool = False
+    can_delete_blog: bool = False
+    can_post_job: bool = False
+    can_access_contact: bool = False
+    can_access_consulting: bool = False
     created_at: datetime
 
 
 class UserUpdate(BaseModel):
+    name: Optional[str] = None
     first_name: Optional[str] = None
     middle_name: Optional[str] = None
     last_name: Optional[str] = None
     phone_number: Optional[str] = None
     is_active: Optional[bool] = None
     role: Optional[str] = None
-    employee_id: Optional[str] = None
+    emp_id: Optional[str] = None
     company_id: Optional[str] = None
+    company_name: Optional[str] = None
 
 
 class PermissionsUpdate(BaseModel):
@@ -95,6 +117,11 @@ class Token(BaseModel):
     role: str
     is_first_login: bool
     access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 
 class PasswordChange(BaseModel):

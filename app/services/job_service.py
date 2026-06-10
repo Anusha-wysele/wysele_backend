@@ -15,7 +15,7 @@ def auto_close_expired(job: Job) -> Job:
     return job
 
 
-def create_job(db: Session, job_in: JobCreate, posted_by: int) -> Job:
+def create_job(db: Session, job_in: JobCreate, posted_by: int, company_id: str | None = None, company_name: str | None = None) -> Job:
     if db.query(Job).filter(Job.job_code == job_in.jobCode, Job.is_deleted == False).first():
         raise HTTPException(status_code=400, detail="Job code already exists")
 
@@ -34,6 +34,8 @@ def create_job(db: Session, job_in: JobCreate, posted_by: int) -> Job:
         salary=job_in.salary,
         status="ACTIVE",
         posted_by=posted_by,
+        company_id=company_id,
+        company_name=company_name,
         is_deleted=False,
     )
     db.add(job)
@@ -64,10 +66,10 @@ def get_job_by_id(db: Session, job_id: int) -> Job:
     return job
 
 
-def update_job(db: Session, job_id: int, job_in: JobUpdate, current_user_id: int, is_super_admin: bool) -> Job:
+def update_job(db: Session, job_id: int, job_in: JobUpdate, current_user) -> Job:
     job = get_job_by_id(db, job_id)
-    if not is_super_admin and job.posted_by != current_user_id:
-        raise HTTPException(status_code=403, detail="You can only edit your own jobs")
+    if current_user.role != "SUPER_ADMIN" and job.company_id != current_user.company_id:
+        raise HTTPException(status_code=403, detail="You can only edit jobs for your own company")
 
     data = job_in.model_dump(exclude_unset=True)
     field_map = {
@@ -84,10 +86,10 @@ def update_job(db: Session, job_id: int, job_in: JobUpdate, current_user_id: int
     return job
 
 
-def delete_job(db: Session, job_id: int, current_user_id: int, is_super_admin: bool):
+def delete_job(db: Session, job_id: int, current_user):
     job = get_job_by_id(db, job_id)
-    if not is_super_admin and job.posted_by != current_user_id:
-        raise HTTPException(status_code=403, detail="You can only delete your own jobs")
+    if current_user.role != "SUPER_ADMIN" and job.company_id != current_user.company_id:
+        raise HTTPException(status_code=403, detail="You can only delete jobs for your own company")
     job.is_deleted = True
     db.commit()
 

@@ -8,8 +8,9 @@ from app.services.email_service import send_new_account_email, send_password_res
 from app.core import security
 from app.core.config import settings
 from app.api.deps import get_db, get_current_user, get_current_super_admin
-from app.schemas.user import Token, LoginRequest, UserRegister, UserResponse, PasswordChange, PasswordResetRequest, PasswordReset
+from app.schemas.user import Token, LoginRequest, UserRegister, UserResponse, PasswordChange, PasswordResetRequest, PasswordReset, RefreshTokenRequest
 from app.models.user import User
+from app.services.audit_service import log_audit_event
 
 router = APIRouter()
 
@@ -20,16 +21,46 @@ def generate_random_password(length: int = 12) -> str:
 
 
 @router.post("/login", response_model=Token)
-def login(credentials: LoginRequest, response: Response, db: Session = Depends(get_db)):
+def login(credentials: LoginRequest, response: Response, request: Request, db: Session = Depends(get_db)):
     user = auth_service.authenticate(db, email=credentials.email, password=credentials.password)
 
     if not user or user.role not in ["ADMIN", "SUPER_ADMIN", "HR"]:
+        # Log failed login attempt
+        log_audit_event(
+            db,
+            action="LOGIN_FAILED",
+            email=credentials.email,
+            details={"message": "Invalid credentials or user not found"},
+            ip_address=request.client.host if request.client else None
+        )
         raise HTTPException(status_code=400, detail="Invalid credentials")
 
     if not user.is_active:
+        log_audit_event(
+            db,
+            action="LOGIN_FAILED",
+            user_id=user.id,
+            email=user.email,
+            details={"message": "Account deactivated"},
+            ip_address=request.client.host if request.client else None
+        )
         raise HTTPException(status_code=403, detail="Account deactivated")
 
-    access_token = security.create_access_token(data={"sub": str(user.id)})
+    # Store claims in JWT token
+    claims = {
+        "sub": str(user.id),
+        "user_id": user.id,
+        "name": user.name or f"{user.first_name} {user.last_name}".strip(),
+        "email": user.email,
+        "role": user.role,
+        "company_id": user.company_id,
+        "company_name": user.company_name,
+        "emp_id": user.employee_id,
+        "is_active": user.is_active
+    }
+
+    access_token = security.create_access_token(data=claims)
+    refresh_token = security.create_refresh_token(data={"sub": str(user.id)})
     is_production = settings.ENVIRONMENT == "production"
 
     # Always set HttpOnly cookie
@@ -42,50 +73,121 @@ def login(credentials: LoginRequest, response: Response, db: Session = Depends(g
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
 
+    # Log successful login
+    log_audit_event(
+        db,
+        action="LOGIN",
+        user_id=user.id,
+        email=user.email,
+        details={"message": "User logged in successfully"},
+        ip_address=request.client.host if request.client else None
+    )
+
     return {
         "token_type": "bearer",
         "role": user.role,
         "is_first_login": user.is_first_login,
-        # Return token in body only in development for Swagger testing
-        "access_token": access_token if not is_production else None,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
     }
 
 
-@router.post("/logout")
-def logout(response: Response):
-    response.delete_cookie(key="access_token", httponly=True, samesite="lax")
-    return {"message": "Logged out successfully"}
+@router.post("/refresh", response_model=Token)
+def refresh(body: RefreshTokenRequest, response: Response, db: Session = Depends(get_db)):
+    payload = security.decode_token(body.refresh_token)
+    if not payload or payload.get("type") != "refresh":
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid refresh token claims")
+
+    user = db.get(User, int(user_id))
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+
+    claims = {
+        "sub": str(user.id),
+        "user_id": user.id,
+        "name": user.name or f"{user.first_name} {user.last_name}".strip(),
+        "email": user.email,
+        "role": user.role,
+        "company_id": user.company_id,
+        "company_name": user.company_name,
+        "emp_id": user.employee_id,
+        "is_active": user.is_active
+    }
+
+    new_access_token = security.create_access_token(data=claims)
+    new_refresh_token = security.create_refresh_token(data={"sub": str(user.id)})
+    is_production = settings.ENVIRONMENT == "production"
+
+    response.set_cookie(
+        key="access_token",
+        value=new_access_token,
+        httponly=True,
+        secure=is_production,
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
+
+    return {
+        "token_type": "bearer",
+        "role": user.role,
+        "is_first_login": user.is_first_login,
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+    }
 
 
 @router.post("/register", response_model=UserResponse)
 def register_user(
     user_in: UserRegister,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin)
 ):
     existing = db.query(User.email, User.employee_id).filter(
-        (User.email == user_in.email) | (User.employee_id == user_in.employee_id)
+        (User.email == user_in.email) | (User.employee_id == user_in.emp_id)
     ).first()
     if existing:
         if existing.email == user_in.email:
             raise HTTPException(status_code=400, detail="Email already exists")
         raise HTTPException(status_code=400, detail="Employee ID already exists")
 
-    # Generate random password — never exposed in API response
-    random_password = generate_random_password()
+    # Map name to first/last name to prevent DB NULL errors
+    names = user_in.name.strip().split(" ", 1)
+    first_name = names[0]
+    last_name = names[1] if len(names) > 1 else "Admin"
+
+    # Map company name to ID
+    company_id_map = {
+        "WYSELE": "WYSELE",
+        "ORBINTIX": "ORBINTIX",
+        "GRACE VIRTUE": "GRACE_VIRTUE"
+    }
+    company_id = company_id_map.get(user_in.company_name.upper(), "WYSELE")
+
+    # Generate random password if not provided
+    temp_password = user_in.password or generate_random_password()
 
     new_user = User(
-        employee_id=user_in.employee_id,
+        employee_id=user_in.emp_id,
         email=user_in.email,
-        first_name=user_in.first_name,
-        middle_name=user_in.middle_name,
-        last_name=user_in.last_name,
+        name=user_in.name,
+        first_name=first_name,
+        middle_name=None,
+        last_name=last_name,
         phone_number=user_in.phone_number,
-        company_id=user_in.company_id,
+        company_id=company_id,
+        company_name=user_in.company_name.upper(),
         role=user_in.role,
-        hashed_password=security.get_password_hash(random_password),
-        is_active=True,
+        hashed_password=security.get_password_hash(temp_password),
+        is_active=user_in.is_active,
         is_first_login=True,
         created_by_id=current_user.id
     )
@@ -94,12 +196,27 @@ def register_user(
     db.commit()
     db.refresh(new_user)
 
-    # Send password to user email in background
+    # Log admin creation
+    log_audit_event(
+        db,
+        action="ADMIN_CREATION",
+        user_id=current_user.id,
+        email=current_user.email,
+        details={
+            "created_admin_id": new_user.id,
+            "created_admin_email": new_user.email,
+            "company_name": new_user.company_name,
+            "role": new_user.role
+        },
+        ip_address=request.client.host if request.client else None
+    )
+
+    # Send welcome email with login credentials
     background_tasks.add_task(
         send_new_account_email,
         email_to=new_user.email,
         username=new_user.email,
-        password=random_password
+        password=temp_password
     )
 
     return new_user
