@@ -26,6 +26,6 @@ def init_db(db: Session) -> None:
         db.add(root_user)
         db.commit()
         db.refresh(root_user)
-        print(f"✅ Root Admin '{settings.FIRST_SUPERUSER}' initialized.")
+        print(f"[SUCCESS] Root Admin '{settings.FIRST_SUPERUSER}' initialized.")
     else:
-        print(f"ℹ️ Root Admin '{settings.FIRST_SUPERUSER}' already exists. Skipping init.")
+        print(f"[INFO] Root Admin '{settings.FIRST_SUPERUSER}' already exists. Skipping init.")
