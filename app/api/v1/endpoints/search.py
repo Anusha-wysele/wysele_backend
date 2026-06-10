@@ -27,7 +27,7 @@ def global_search(
             {"id": u.id, "name": f"{u.first_name} {u.last_name}",
              "email": u.email, "role": u.role, "employee_id": u.employee_id}
             for u in db.query(User).filter(
-                User.role.in_(["ADMIN", "HR"]),
+                User.role.in_(["ADMIN", "SUPER_ADMIN"]),
                 (User.first_name.ilike(keyword)) |
                 (User.last_name.ilike(keyword)) |
                 (User.email.ilike(keyword)) |
@@ -78,7 +78,7 @@ def global_search(
             ).all()
         ]
 
-    # ── ADMIN — based on permissions ───────────────────────────────
+    # ── ADMIN — based on permissions & multi-tenancy ───────────────
     elif current_user.role == "ADMIN":
 
         if current_user.can_post_blog or current_user.can_edit_blog or current_user.can_delete_blog:
@@ -107,34 +107,30 @@ def global_search(
                 ).all()
             ]
 
-    # ── HR — jobs and applications they posted ─────────────────────
-    elif current_user.role == "HR":
-
-        if current_user.can_post_job:
-            results["jobs"] = [
-                {"id": j.id, "role": j.role, "job_code": j.job_code,
-                 "location": j.location, "status": j.status}
-                for j in db.query(Job).filter(
-                    Job.is_deleted == False,
-                    Job.posted_by == current_user.id,
-                    Job.role.ilike(keyword) | Job.location.ilike(keyword) |
-                    Job.region.ilike(keyword) | Job.job_code.ilike(keyword)
+        # Admins can search their own company's jobs and applications
+        results["jobs"] = [
+            {"id": j.id, "role": j.role, "job_code": j.job_code,
+             "location": j.location, "status": j.status}
+            for j in db.query(Job).filter(
+                Job.is_deleted == False,
+                Job.company_id == current_user.company_id,
+                (Job.role.ilike(keyword) | Job.location.ilike(keyword) |
+                 Job.region.ilike(keyword) | Job.job_code.ilike(keyword))
+            ).all()
+        ]
+        
+        job_ids = [j["id"] for j in results["jobs"]]
+        if job_ids:
+            results["applications"] = [
+                {"id": a.id, "name": f"{a.first_name} {a.last_name}",
+                 "email": a.email, "job_id": a.job_id}
+                for a in db.query(Application).filter(
+                    Application.job_id.in_(job_ids),
+                    (Application.first_name.ilike(keyword) |
+                     Application.last_name.ilike(keyword) |
+                     Application.email.ilike(keyword))
                 ).all()
             ]
-
-            # Applications for their jobs
-            hr_job_ids = [j["id"] for j in results.get("jobs", [])]
-            if hr_job_ids:
-                results["applications"] = [
-                    {"id": a.id, "name": f"{a.first_name} {a.last_name}",
-                     "email": a.email, "job_id": a.job_id}
-                    for a in db.query(Application).filter(
-                        Application.job_id.in_(hr_job_ids),
-                        Application.first_name.ilike(keyword) |
-                        Application.last_name.ilike(keyword) |
-                        Application.email.ilike(keyword)
-                    ).all()
-                ]
 
     return {
         "query": q,

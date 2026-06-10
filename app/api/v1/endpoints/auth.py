@@ -16,15 +16,29 @@ router = APIRouter()
 
 
 def generate_random_password(length: int = 12) -> str:
-    chars = string.ascii_letters + string.digits + "!@#$%"
-    return "".join(secrets.choice(chars) for _ in range(length))
+    if length < 8:
+        length = 12
+    # Ensure we get one of each required type
+    upper = secrets.choice(string.ascii_uppercase)
+    lower = secrets.choice(string.ascii_lowercase)
+    digit = secrets.choice(string.digits)
+    special = secrets.choice("!@#$%^&*()")
+    
+    # Fill the remaining characters
+    all_chars = string.ascii_letters + string.digits + "!@#$%^&*()"
+    remaining = "".join(secrets.choice(all_chars) for _ in range(length - 4))
+    
+    # Combine and shuffle
+    password_list = list(upper + lower + digit + special + remaining)
+    secrets.SystemRandom().shuffle(password_list)
+    return "".join(password_list)
 
 
 @router.post("/login", response_model=Token)
 def login(credentials: LoginRequest, response: Response, request: Request, db: Session = Depends(get_db)):
     user = auth_service.authenticate(db, email=credentials.email, password=credentials.password)
 
-    if not user or user.role not in ["ADMIN", "SUPER_ADMIN", "HR"]:
+    if not user or user.role not in ["ADMIN", "SUPER_ADMIN"]:
         # Log failed login attempt
         log_audit_event(
             db,

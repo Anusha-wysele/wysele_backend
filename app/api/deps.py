@@ -74,10 +74,10 @@ def get_current_super_admin(
 def get_current_hr_or_admin(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    if current_user.role not in ["ADMIN", "SUPER_ADMIN", "HR"]:
+    if current_user.role not in ["ADMIN", "SUPER_ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="HR or Admin privileges required",
+            detail="Admin privileges required",
         )
     return current_user
 

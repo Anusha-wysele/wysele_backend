@@ -8,6 +8,19 @@ PERSONAL_DOMAINS = {
     "icloud.com", "aol.com", "protonmail.com", "mail.com"
 }
 
+def validate_strong_password(value: str) -> str:
+    if len(value) < 8:
+        raise ValueError("Password must be at least 8 characters long")
+    if not any(c.isupper() for c in value):
+        raise ValueError("Password must contain at least one uppercase letter")
+    if not any(c.islower() for c in value):
+        raise ValueError("Password must contain at least one lowercase letter")
+    if not any(c.isdigit() for c in value):
+        raise ValueError("Password must contain at least one number")
+    if not any(not c.isalnum() for c in value):
+        raise ValueError("Password must contain at least one special character")
+    return value
+
 
 class UserRegister(BaseModel):
     emp_id: str = Field(..., description="Unique Employee ID (e.g., WYT0015)")
@@ -33,6 +46,13 @@ class UserRegister(BaseModel):
     def validate_role(cls, v: str) -> str:
         if v not in ["SUPER_ADMIN", "ADMIN"]:
             raise ValueError("Role must be SUPER_ADMIN or ADMIN")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            return validate_strong_password(v)
         return v
 
     @model_validator(mode="after")
@@ -68,6 +88,11 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8)
     role: str = Field(..., description="Role must be SUPER_ADMIN or ADMIN")
+
+    @field_validator("password")
+    @classmethod
+    def validate_create_password(cls, v: str) -> str:
+        return validate_strong_password(v)
 
 
 class UserResponse(UserBase):
@@ -128,6 +153,11 @@ class PasswordChange(BaseModel):
     old_password: str
     new_password: str = Field(..., min_length=8)
 
+    @field_validator("new_password")
+    @classmethod
+    def validate_change_password(cls, v: str) -> str:
+        return validate_strong_password(v)
+
 
 class PasswordResetRequest(BaseModel):
     email: EmailStr
@@ -136,3 +166,8 @@ class PasswordResetRequest(BaseModel):
 class PasswordReset(BaseModel):
     token: str
     new_password: str = Field(..., min_length=8)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_reset_password(cls, v: str) -> str:
+        return validate_strong_password(v)
