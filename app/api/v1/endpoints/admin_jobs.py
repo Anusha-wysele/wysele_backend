@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.api import deps
 from app.models.user import User
 from app.core import security
@@ -56,10 +56,13 @@ def get_all_jobs(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_super_admin),
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=10, ge=1, le=100)
+    limit: int = Query(default=10, ge=1, le=100),
+    status: Optional[str] = Query(default=None)
 ):
-    query = db.query(Job).filter(Job.is_deleted == False).order_by(Job.created_at.desc())
-    return paginate(query, page, limit)
+    query = db.query(Job).filter(Job.is_deleted == False)
+    if status:
+        query = query.filter(Job.status == status.upper())
+    return paginate(query.order_by(Job.created_at.desc()), page, limit)
 
 
 # ADMIN: Get all applicants across all jobs

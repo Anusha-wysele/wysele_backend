@@ -7,7 +7,7 @@ from app.schemas.application import ApplicationResponse
 from app.schemas.pagination import PaginatedResponse, paginate
 from app.models.job import Job
 from app.services import job_service
-from typing import List
+from typing import List, Optional
 
 router = APIRouter()
 
@@ -28,13 +28,16 @@ def get_hr_jobs(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_hr_or_admin),
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=10, ge=1, le=100)
+    limit: int = Query(default=10, ge=1, le=100),
+    status: Optional[str] = Query(default=None)
 ):
     query = db.query(Job).filter(
         Job.posted_by == current_user.id,
         Job.is_deleted == False
-    ).order_by(Job.created_at.desc())
-    return paginate(query, page, limit)
+    )
+    if status:
+        query = query.filter(Job.status == status.upper())
+    return paginate(query.order_by(Job.created_at.desc()), page, limit)
 
 
 # HR: Update own job

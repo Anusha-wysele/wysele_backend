@@ -221,7 +221,8 @@ def get_jobs(
     current_user: Optional[User] = Depends(get_current_user_optional),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=100),
-    company_id: Optional[str] = Query(default=None)
+    company_id: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None)
 ):
     query = db.query(Job).filter(Job.is_deleted == False)
     if current_user:
@@ -233,6 +234,8 @@ def get_jobs(
         else:
             user_company_id, _ = deps.normalize_company(current_user.company_id)
             query = query.filter(Job.company_id == user_company_id)
+        if status:
+            query = query.filter(Job.status == status.upper())
     else:
         # Public Candidate list: view active jobs only
         query = query.filter(Job.status == "ACTIVE")

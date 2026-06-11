@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional, List
 from datetime import date, datetime
 
@@ -23,7 +23,17 @@ class JobCreate(BaseModel):
     application_deadline: date
     role: str
     company_id: Optional[str] = None
-    status: Optional[str] = "Active"
+    status: Optional[str] = "ACTIVE"
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v_upper = v.upper()
+            if v_upper not in ["ACTIVE", "DRAFT", "CLOSED"]:
+                raise ValueError("Status must be ACTIVE, DRAFT, or CLOSED")
+            return v_upper
+        return v
 
 
 class JobUpdate(BaseModel):
@@ -46,6 +56,16 @@ class JobUpdate(BaseModel):
     company_id: Optional[str] = None
     company_name: Optional[str] = None
     status: Optional[str] = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v_upper = v.upper()
+            if v_upper not in ["ACTIVE", "DRAFT", "CLOSED"]:
+                raise ValueError("Status must be ACTIVE, DRAFT, or CLOSED")
+            return v_upper
+        return v
 
 
 class JobResponse(BaseModel):

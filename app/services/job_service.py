@@ -38,7 +38,7 @@ def create_job(db: Session, job_in: JobCreate, posted_by: int, company_id: str |
         application_email=job_in.application_email,
         application_deadline=job_in.application_deadline,
         role=job_in.role,
-        status=job_in.status or "Active",
+        status=job_in.status or "ACTIVE",
         posted_by=posted_by,
         company_id=company_id,
         is_deleted=False,
