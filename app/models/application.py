@@ -20,7 +20,7 @@ class Application(Base):
     notice_period = Column(String, nullable=False)
     relevant_experience = Column(String, nullable=False)
     resume_url = Column(String, nullable=False)
-    applied_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    applied_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     job = relationship("Job", back_populates="applications")
 

@@ -21,8 +21,14 @@ async def get_current_user(
     # 2. Fallback to Authorization header (for Swagger/testing)
     if not token:
         auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
+        if auth_header:
+            parts = auth_header.split()
+            if len(parts) == 2 and parts[0].lower() == "bearer":
+                token = parts[1]
+
+    # 3. Fallback to query parameters (for easy testing)
+    if not token:
+        token = request.query_params.get("token") or request.query_params.get("access_token")
 
     if not token:
         raise HTTPException(
@@ -34,11 +40,19 @@ async def get_current_user(
     db_token = db.query(UserToken).filter(
         UserToken.token == token,
         UserToken.token_type == "ACCESS",
-        UserToken.is_active == True,
-        UserToken.expires_at > datetime.now(timezone.utc)
+        UserToken.is_active == True
     ).first()
 
     if not db_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
+
+    # Timezone-safe expiration check
+    expires_at = db_token.expires_at
+    now = datetime.now(timezone.utc) if expires_at.tzinfo is not None else datetime.utcnow()
+    if expires_at < now:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -128,3 +142,23 @@ def require_can_access_consulting(current_user: User = Depends(get_current_user)
     if not current_user.can_access_consulting:
         raise HTTPException(status_code=403, detail="You do not have permission to access consulting")
     return current_user
+
+
+def normalize_company(company_input: str | None) -> tuple[str, str]:
+    if not company_input:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Company ID and Company Name should match (wysele, orbintix, gracevirtue)"
+        )
+    clean = company_input.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+    if "orbintix" in clean:
+        return "orbintix", "orbintix"
+    elif "grace" in clean or "virtue" in clean:
+        return "gracevirtue", "gracevirtue"
+    elif "wysele" in clean:
+        return "wysele", "wysele"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Company ID and Company Name should match"
+        )

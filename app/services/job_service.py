@@ -16,27 +16,31 @@ def auto_close_expired(job: Job) -> Job:
 
 
 def create_job(db: Session, job_in: JobCreate, posted_by: int, company_id: str | None = None, company_name: str | None = None) -> Job:
-    if db.query(Job).filter(Job.job_code == job_in.jobCode, Job.is_deleted == False).first():
+    if db.query(Job).filter(Job.job_code == job_in.job_code, Job.is_deleted == False).first():
         raise HTTPException(status_code=400, detail="Job code already exists")
 
     job = Job(
-        description=job_in.description,
+        job_code=job_in.job_code,
+        company_name=job_in.company_name or company_name,
+        job_title=job_in.job_title,
+        department=job_in.department,
+        employment_type=job_in.employment_type,
+        work_mode=job_in.work_mode,
         experience=job_in.experience,
-        job_code=job_in.jobCode,
-        job_posted_date=job_in.jobPostedDate,
-        job_type=job_in.jobType,
-        key_skills=job_in.keySkills,
-        responsibilities=job_in.responsibilities,
-        last_date_to_apply=job_in.lastDateToApply,
+        openings=job_in.openings,
         location=job_in.location,
-        region=job_in.region,
+        min_salary=job_in.min_salary,
+        max_salary=job_in.max_salary,
+        description=job_in.description,
+        responsibilities=job_in.responsibilities,
+        required_skills=job_in.required_skills,
+        qualification=job_in.qualification,
+        application_email=job_in.application_email,
+        application_deadline=job_in.application_deadline,
         role=job_in.role,
-        title=job_in.title,
-        salary=job_in.salary,
-        status=job_in.status or "ACTIVE",
+        status=job_in.status or "Active",
         posted_by=posted_by,
         company_id=company_id,
-        company_name=company_name,
         is_deleted=False,
     )
     db.add(job)
@@ -73,14 +77,8 @@ def update_job(db: Session, job_id: int, job_in: JobUpdate, current_user) -> Job
         raise HTTPException(status_code=403, detail="You can only edit jobs for your own company")
 
     data = job_in.model_dump(exclude_unset=True)
-    field_map = {
-        "jobType": "job_type",
-        "keySkills": "key_skills",
-        "lastDateToApply": "last_date_to_apply",
-        "responsibilities": "responsibilities",
-    }
     for key, value in data.items():
-        setattr(job, field_map.get(key, key), value)
+        setattr(job, key, value)
 
     db.commit()
     db.refresh(job)

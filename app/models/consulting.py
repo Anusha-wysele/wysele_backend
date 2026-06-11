@@ -12,4 +12,4 @@ class ConsultingInquiry(Base):
     mobile_number = Column(String, nullable=False)
     company_name = Column(String, nullable=False)
     message = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)

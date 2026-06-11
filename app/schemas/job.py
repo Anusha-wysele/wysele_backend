@@ -4,36 +4,45 @@ from datetime import date, datetime
 
 
 class JobCreate(BaseModel):
-    description: str
+    job_code: str
+    company_name: str
+    job_title: str
+    department: str
+    employment_type: str
+    work_mode: str
     experience: str
-    jobCode: str
-    jobPostedDate: date
-    jobType: str
-    keySkills: List[str] = Field(..., min_length=1)
-    responsibilities: Optional[List[str]] = None
-    lastDateToApply: date
+    openings: int
     location: str
-    region: str
+    min_salary: Optional[int] = None
+    max_salary: Optional[int] = None
+    description: str
+    responsibilities: Optional[List[str]] = None
+    required_skills: List[str] = Field(..., min_length=1)
+    qualification: Optional[str] = None
+    application_email: Optional[str] = None
+    application_deadline: date
     role: str
-    title: str
-    salary: Optional[str] = None
     company_id: Optional[str] = None
-    company_name: Optional[str] = None
-    status: Optional[str] = "ACTIVE"
+    status: Optional[str] = "Active"
 
 
 class JobUpdate(BaseModel):
-    description: Optional[str] = None
+    job_title: Optional[str] = None
+    department: Optional[str] = None
+    employment_type: Optional[str] = None
+    work_mode: Optional[str] = None
     experience: Optional[str] = None
-    jobType: Optional[str] = None
-    keySkills: Optional[List[str]] = None
-    responsibilities: Optional[List[str]] = None
-    lastDateToApply: Optional[date] = None
+    openings: Optional[int] = None
     location: Optional[str] = None
-    region: Optional[str] = None
+    min_salary: Optional[int] = None
+    max_salary: Optional[int] = None
+    description: Optional[str] = None
+    responsibilities: Optional[List[str]] = None
+    required_skills: Optional[List[str]] = None
+    qualification: Optional[str] = None
+    application_email: Optional[str] = None
+    application_deadline: Optional[date] = None
     role: Optional[str] = None
-    title: Optional[str] = None
-    salary: Optional[str] = None
     company_id: Optional[str] = None
     company_name: Optional[str] = None
     status: Optional[str] = None
@@ -43,23 +52,26 @@ class JobResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    description: str
-    experience: str
     job_code: str
-    job_posted_date: date
-    job_type: str
-    key_skills: List[str]
-    responsibilities: Optional[List[str]]
-    last_date_to_apply: date
+    company_name: str
+    job_title: str
+    department: str
+    employment_type: str
+    work_mode: str
+    experience: str
+    openings: int
     location: str
-    region: str
-    role: str
-    title: str
-    salary: Optional[str]
+    min_salary: Optional[int]
+    max_salary: Optional[int]
+    description: str
+    responsibilities: Optional[List[str]]
+    required_skills: List[str]
+    qualification: Optional[str]
+    application_email: Optional[str]
+    application_deadline: date
     status: str
     posted_by: int
     company_id: Optional[str]
-    company_name: Optional[str]
     created_at: datetime
 
 

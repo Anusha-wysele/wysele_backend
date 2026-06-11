@@ -11,4 +11,4 @@ class ContactInquiry(Base):
     phone_number = Column(String, nullable=True)
     location = Column(String, nullable=True)
     message = Column(Text, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)

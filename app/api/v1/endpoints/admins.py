@@ -75,13 +75,10 @@ def update_user(
 
     # Map company name to ID
     if user_in.company_name is not None:
-        user.company_name = user_in.company_name.upper()
-        company_id_map = {
-            "WYSELE": "WYSELE",
-            "ORBINTIX": "ORBINTIX",
-            "GRACE VIRTUE": "GRACE_VIRTUE"
-        }
-        user.company_id = company_id_map.get(user_in.company_name.upper(), "WYSELE")
+        from app.api.deps import normalize_company
+        company_id, company_name = normalize_company(user_in.company_name)
+        user.company_id = company_id
+        user.company_name = company_name
 
     if user_in.emp_id is not None:
         user.employee_id = user_in.emp_id

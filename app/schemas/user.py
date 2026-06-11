@@ -72,12 +72,12 @@ class UserRegister(BaseModel):
     @model_validator(mode="after")
     def validate_email_company_match(self) -> "UserRegister":
         email_domain = self.email.split("@")[-1].lower()
-        company = self.company_name.upper().replace("_", " ")
+        company = self.company_name.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
         
         expected_companies = {
-            "wysele.com": "WYSELE",
-            "orbintix.com": "ORBINTIX",
-            "gracevirtue.com": "GRACE VIRTUE"
+            "wysele.com": "wysele",
+            "orbintix.com": "orbintix",
+            "gracevirtue.com": "gracevirtue"
         }
         
         expected_comp = expected_companies.get(email_domain)

@@ -74,7 +74,10 @@ def apply_for_job(
 
     if not record:
         raise HTTPException(status_code=400, detail="Invalid OTP")
-    if datetime.now(timezone.utc) > record.expires_at:
+    
+    expires_at = record.expires_at
+    now = datetime.now(timezone.utc) if expires_at.tzinfo is not None else datetime.utcnow()
+    if now > expires_at:
         raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one")
 
     ext = resume.filename.rsplit(".", 1)[-1].lower() if "." in resume.filename else ""
@@ -124,11 +127,9 @@ def create_job(
     current_user: User = Depends(deps.get_current_admin)
 ):
     if current_user.role == "SUPER_ADMIN":
-        company_id = job_in.company_id or "WYSELE"
-        company_name = job_in.company_name or "WYSELE"
+        company_id, company_name = deps.normalize_company(job_in.company_name or job_in.company_id)
     else:
-        company_id = current_user.company_id
-        company_name = current_user.company_name
+        company_id, company_name = deps.normalize_company(current_user.company_name or current_user.company_id)
 
     job = job_service.create_job(
         db, job_in, current_user.id, company_id=company_id, company_name=company_name
@@ -161,12 +162,13 @@ def search_jobs_optimized(
 ):
     keyword = f"%{q}%"
     conditions = [
-        Job.title.ilike(keyword),
+        Job.job_title.ilike(keyword),
         Job.role.ilike(keyword),
         Job.location.ilike(keyword),
-        Job.region.ilike(keyword),
         Job.description.ilike(keyword),
-        Job.job_code.ilike(keyword)
+        Job.job_code.ilike(keyword),
+        Job.department.ilike(keyword),
+        Job.work_mode.ilike(keyword)
     ]
     if q.strip().isdigit():
         conditions.append(Job.id == int(q.strip()))
@@ -184,9 +186,10 @@ def search_jobs_optimized(
 def search_jobs(
     db: Session = Depends(deps.get_db),
     role: str = Query(default=None),
-    title: str = Query(default=None),
-    region: str = Query(default=None),
+    job_title: str = Query(default=None),
     location: str = Query(default=None),
+    department: str = Query(default=None),
+    work_mode: str = Query(default=None),
     skills: str = Query(default=None, description="Comma separated e.g. Python,FastAPI"),
     experience: str = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -195,17 +198,19 @@ def search_jobs(
     query = db.query(Job).filter(Job.is_deleted == False, Job.status == "ACTIVE")
     if role:
         query = query.filter(Job.role.ilike(f"%{role}%"))
-    if title:
-        query = query.filter(Job.title.ilike(f"%{title}%"))
-    if region:
-        query = query.filter(Job.region.ilike(f"%{region}%"))
+    if job_title:
+        query = query.filter(Job.job_title.ilike(f"%{job_title}%"))
     if location:
         query = query.filter(Job.location.ilike(f"%{location}%"))
+    if department:
+        query = query.filter(Job.department.ilike(f"%{department}%"))
+    if work_mode:
+        query = query.filter(Job.work_mode.ilike(f"%{work_mode}%"))
     if experience:
         query = query.filter(Job.experience.ilike(f"%{experience}%"))
     if skills:
         for skill in [s.strip() for s in skills.split(",")]:
-            query = query.filter(Job.key_skills.any(skill))
+            query = query.filter(Job.required_skills.any(skill))
     return paginate(query.order_by(Job.created_at.desc()), page, limit)
 
 
@@ -223,9 +228,11 @@ def get_jobs(
         # Authenticated Admin Portal view: restrict to own company jobs
         if current_user.role == "SUPER_ADMIN":
             if company_id:
-                query = query.filter(Job.company_id == company_id.upper())
+                company_id_norm, _ = deps.normalize_company(company_id)
+                query = query.filter(Job.company_id == company_id_norm)
         else:
-            query = query.filter(Job.company_id == current_user.company_id)
+            user_company_id, _ = deps.normalize_company(current_user.company_id)
+            query = query.filter(Job.company_id == user_company_id)
     else:
         # Public Candidate list: view active jobs only
         query = query.filter(Job.status == "ACTIVE")
@@ -256,7 +263,7 @@ def update_job(
     current_user: User = Depends(deps.get_current_admin)
 ):
     job = job_service.get_job_by_id(db, job_id)
-    if current_user.role != "SUPER_ADMIN" and job.company_id != current_user.company_id:
+    if current_user.role != "SUPER_ADMIN" and deps.normalize_company(job.company_id)[0] != deps.normalize_company(current_user.company_id)[0]:
         raise HTTPException(status_code=403, detail="You can only edit jobs for your own company")
 
     updated_job = job_service.update_job(db, job_id, job_in, current_user)
@@ -287,7 +294,7 @@ def get_job_applications(
     current_user: User = Depends(deps.get_current_admin)
 ):
     job = job_service.get_job_by_id(db, job_id)
-    if current_user.role != "SUPER_ADMIN" and job.company_id != current_user.company_id:
+    if current_user.role != "SUPER_ADMIN" and deps.normalize_company(job.company_id)[0] != deps.normalize_company(current_user.company_id)[0]:
         raise HTTPException(
             status_code=403,
             detail="You can only view applications for jobs belonging to your company"

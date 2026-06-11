@@ -6,17 +6,18 @@ indexes = [
     "CREATE EXTENSION IF NOT EXISTS pg_trgm",
 
     # Jobs — trigram GIN indexes for optimized text search
-    "CREATE INDEX IF NOT EXISTS idx_jobs_title_trgm ON jobs USING gin (title gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS idx_jobs_title_trgm ON jobs USING gin (job_title gin_trgm_ops)",
     "CREATE INDEX IF NOT EXISTS idx_jobs_role_trgm ON jobs USING gin (role gin_trgm_ops)",
     "CREATE INDEX IF NOT EXISTS idx_jobs_location_trgm ON jobs USING gin (location gin_trgm_ops)",
-    "CREATE INDEX IF NOT EXISTS idx_jobs_region_trgm ON jobs USING gin (region gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS idx_jobs_dept_trgm ON jobs USING gin (department gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS idx_jobs_workmode_trgm ON jobs USING gin (work_mode gin_trgm_ops)",
     "CREATE INDEX IF NOT EXISTS idx_jobs_desc_trgm ON jobs USING gin (description gin_trgm_ops)",
 
     # Jobs — standard B-Tree indexes
     "CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)",
     "CREATE INDEX IF NOT EXISTS idx_jobs_is_deleted ON jobs(is_deleted)",
     "CREATE INDEX IF NOT EXISTS idx_jobs_posted_by ON jobs(posted_by)",
-    "CREATE INDEX IF NOT EXISTS idx_jobs_last_date ON jobs(last_date_to_apply)",
+    "CREATE INDEX IF NOT EXISTS idx_jobs_deadline ON jobs(application_deadline)",
     "CREATE INDEX IF NOT EXISTS idx_jobs_role ON jobs(role)",
     "CREATE INDEX IF NOT EXISTS idx_jobs_location ON jobs(location)",
 

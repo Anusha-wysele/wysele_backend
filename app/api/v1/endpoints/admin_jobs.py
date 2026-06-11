@@ -27,6 +27,9 @@ def create_hr(
     if db.query(User).filter(User.employee_id == user_in.employee_id).first():
         raise HTTPException(status_code=400, detail="Employee ID already exists")
 
+    from app.api.deps import normalize_company
+    company_id, company_name = normalize_company(user_in.company_id)
+
     hr_user = User(
         email=user_in.email,
         employee_id=user_in.employee_id,
@@ -36,7 +39,8 @@ def create_hr(
         last_name=user_in.last_name,
         phone_number=user_in.phone_number,
         role="HR",
-        company_id=user_in.company_id,
+        company_id=company_id,
+        company_name=company_name,
         is_active=True,
         created_by_id=current_user.id
     )

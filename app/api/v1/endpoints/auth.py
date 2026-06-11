@@ -124,11 +124,15 @@ def refresh(body: RefreshTokenRequest, response: Response, db: Session = Depends
     db_refresh = db.query(UserToken).filter(
         UserToken.token == body.refresh_token,
         UserToken.token_type == "REFRESH",
-        UserToken.is_active == True,
-        UserToken.expires_at > datetime.now(timezone.utc)
+        UserToken.is_active == True
     ).first()
 
     if not db_refresh:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    expires_at = db_refresh.expires_at
+    now = datetime.now(timezone.utc) if expires_at.tzinfo is not None else datetime.utcnow()
+    if expires_at < now:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     user = db_refresh.user
@@ -185,13 +189,8 @@ def register_user(
     first_name = names[0]
     last_name = names[1] if len(names) > 1 else "Admin"
 
-    # Map company name to ID
-    company_id_map = {
-        "WYSELE": "WYSELE",
-        "ORBINTIX": "ORBINTIX",
-        "GRACE VIRTUE": "GRACE_VIRTUE"
-    }
-    company_id = company_id_map.get(user_in.company_name.upper(), "WYSELE")
+    from app.api.deps import normalize_company
+    company_id, company_name = normalize_company(user_in.company_name)
 
     # Generate random password if not provided
     temp_password = user_in.password or generate_random_password()
@@ -205,7 +204,7 @@ def register_user(
         last_name=last_name,
         phone_number=user_in.phone_number,
         company_id=company_id,
-        company_name=user_in.company_name.upper(),
+        company_name=company_name,
         role=user_in.role,
         hashed_password=security.get_password_hash(temp_password),
         is_active=user_in.is_active,
@@ -287,7 +286,15 @@ def forgot_password(
 def reset_password(body: PasswordReset, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.reset_token == body.token).first()
 
-    if not user or user.reset_token_expiry < datetime.now(timezone.utc):
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    reset_expiry = user.reset_token_expiry
+    if reset_expiry:
+        now = datetime.now(timezone.utc) if reset_expiry.tzinfo is not None else datetime.utcnow()
+        if reset_expiry < now:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+    else:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
     user.hashed_password = security.get_password_hash(body.new_password)

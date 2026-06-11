@@ -12,4 +12,4 @@ class EmailVerification(Base):
     purpose = Column(String, nullable=False)  # "consulting" or "job_application"
     is_verified = Column(Boolean, default=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
