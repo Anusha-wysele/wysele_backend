@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query, status, HTTPException, UploadFile, File, Form, BackgroundTasks, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 import base64
 import random
 import string
@@ -9,8 +10,8 @@ from app.models.job import Job
 from app.models.application import Application
 from app.models.email_verification import EmailVerification
 from app.models.user import User
-from app.schemas.job import JobCreate, JobUpdate, JobResponse
-from app.schemas.application import ApplicationCreate, ApplicationResponse
+from app.schemas.job import JobCreate, JobUpdate, JobResponse, JobCreateSuccess
+from app.schemas.application import ApplicationCreate, ApplicationResponse, ApplicationSuccess
 from app.schemas.consulting import OTPRequest
 from app.schemas.pagination import PaginatedResponse, paginate
 from app.services import job_service
@@ -47,7 +48,7 @@ def send_application_otp(body: OTPRequest, background_tasks: BackgroundTasks, db
 
 
 # POST /jobs/apply — Public
-@router.post("/apply", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/apply", response_model=ApplicationSuccess, status_code=status.HTTP_201_CREATED)
 def apply_for_job(
     otp: str = Query(..., description="OTP received on email"),
     job_id: int = Form(...),
@@ -100,7 +101,7 @@ def apply_for_job(
     result = job_service.apply_for_job(db, job_id, app_in)
     db.delete(record)
     db.commit()
-    return result
+    return {"message": "Application submitted successfully", "application": result}
 
 
 from app.services.audit_service import log_audit_event
@@ -115,7 +116,7 @@ async def get_current_user_optional(request: Request, db: Session = Depends(deps
 
 
 # POST /jobs — Admin/Super Admin
-@router.post("/", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=JobCreateSuccess, status_code=status.HTTP_201_CREATED)
 def create_job(
     job_in: JobCreate,
     request: Request,
@@ -147,7 +148,35 @@ def create_job(
         },
         ip_address=request.client.host if request.client else None
     )
-    return job
+    return {"message": "Job posted successfully", "job": job}
+
+
+# GET /jobs/search/optimized — Optimized public search using single query keyword
+@router.get("/search/optimized", response_model=PaginatedResponse[JobResponse])
+def search_jobs_optimized(
+    q: str = Query(..., min_length=1, description="Unified search keyword"),
+    db: Session = Depends(deps.get_db),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=10, ge=1, le=100)
+):
+    keyword = f"%{q}%"
+    conditions = [
+        Job.title.ilike(keyword),
+        Job.role.ilike(keyword),
+        Job.location.ilike(keyword),
+        Job.region.ilike(keyword),
+        Job.description.ilike(keyword),
+        Job.job_code.ilike(keyword)
+    ]
+    if q.strip().isdigit():
+        conditions.append(Job.id == int(q.strip()))
+
+    query = db.query(Job).filter(
+        Job.is_deleted == False,
+        Job.status == "ACTIVE",
+        or_(*conditions)
+    )
+    return paginate(query.order_by(Job.created_at.desc()), page, limit)
 
 
 # GET /jobs/search — Public search
@@ -155,6 +184,7 @@ def create_job(
 def search_jobs(
     db: Session = Depends(deps.get_db),
     role: str = Query(default=None),
+    title: str = Query(default=None),
     region: str = Query(default=None),
     location: str = Query(default=None),
     skills: str = Query(default=None, description="Comma separated e.g. Python,FastAPI"),
@@ -165,6 +195,8 @@ def search_jobs(
     query = db.query(Job).filter(Job.is_deleted == False, Job.status == "ACTIVE")
     if role:
         query = query.filter(Job.role.ilike(f"%{role}%"))
+    if title:
+        query = query.filter(Job.title.ilike(f"%{title}%"))
     if region:
         query = query.filter(Job.region.ilike(f"%{region}%"))
     if location:
@@ -203,8 +235,15 @@ def get_jobs(
 
 # GET /jobs/{id} — Public details
 @router.get("/{job_id}", response_model=JobResponse)
-def get_job(job_id: int, db: Session = Depends(deps.get_db)):
-    return job_service.get_job_by_id(db, job_id)
+def get_job(
+    job_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    job = job_service.get_job_by_id(db, job_id)
+    if job.status == "DRAFT" and not current_user:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
 
 # PUT /jobs/{id} — Admin/Super Admin
@@ -238,34 +277,6 @@ def update_job(
 
     return updated_job
 
-
-# DELETE /jobs/{id} — Admin/Super Admin
-@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_job(
-    job_id: int,
-    request: Request,
-    db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_admin)
-):
-    job = job_service.get_job_by_id(db, job_id)
-    if current_user.role != "SUPER_ADMIN" and job.company_id != current_user.company_id:
-        raise HTTPException(status_code=403, detail="You can only delete jobs for your own company")
-
-    job_service.delete_job(db, job_id, current_user)
-
-    # Log job deletion
-    log_audit_event(
-        db,
-        action="JOB_DELETION",
-        user_id=current_user.id,
-        email=current_user.email,
-        details={
-            "job_id": job_id,
-            "job_code": job.job_code,
-            "company_id": job.company_id
-        },
-        ip_address=request.client.host if request.client else None
-    )
 
 
 # GET /jobs/{id}/applications — Admin/Super Admin

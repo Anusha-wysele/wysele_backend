@@ -12,6 +12,7 @@ class Blog(Base):
     category = Column(String, index=True)
     image_url = Column(String)
     read_time = Column(String)
+    status = Column(String, default="ACTIVE", nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     # Author Info

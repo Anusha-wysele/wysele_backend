@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -92,26 +92,91 @@ async def db_exception_handler(request: Request, exc: SQLAlchemyError):
         content={"detail": "An internal error occurred. Please contact support."}
     )
 
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    path = request.url.path
+    method = request.method
+    
+    operation = None
+    if method == "POST":
+        if "/jobs/apply" in path:
+            operation = "Job application failed"
+        elif "/jobs" in path:
+            operation = "Job posting failed"
+        elif "/blogs" in path:
+            operation = "Blog posting failed"
+
+    if operation:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "message": operation,
+                "error": exc.detail
+            }
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    errors = []
+    errors_list = []
+    field_errors = []
     for error in exc.errors():
-        # Clean up the error message for the frontend
-        field = " -> ".join([str(loc) for loc in error["loc"] if loc != "body"])
-        message = error["msg"]
-        input_type = error.get("type", "unknown")
+        field = error["loc"][-1] if error["loc"] else "field"
+        message = error.get("msg", "")
+        err_type = error.get("type", "unknown")
         
-        errors.append({
-            "field": field,
-            "error_type": input_type,
-            "message": f"Invalid input for '{field}': {message}"
+        # Format a short, clear error message
+        if err_type == "missing":
+            clean_msg = "Field is required"
+        elif "int" in err_type or "decimal" in err_type or "float" in err_type:
+            clean_msg = "All integers should be used"
+        elif message.startswith("Value error, "):
+            clean_msg = message[len("Value error, "):]
+        elif message.startswith("Assertion failed, "):
+            clean_msg = message[len("Assertion failed, "):]
+        else:
+            clean_msg = message
+
+        field_errors.append(f"{field}: {clean_msg}")
+        
+        # Keep structured errors format as fallback/legacy format
+        full_field_path = " -> ".join([str(loc) for loc in error["loc"] if loc != "body"])
+        errors_list.append({
+            "field": full_field_path,
+            "error_type": err_type,
+            "message": clean_msg
         })
+
+    path = request.url.path
+    method = request.method
+    
+    operation = None
+    if method == "POST":
+        if "/jobs/apply" in path:
+            operation = "Job application failed"
+        elif "/jobs" in path:
+            operation = "Job posting failed"
+        elif "/blogs" in path:
+            operation = "Blog posting failed"
+
+    if operation:
+        error_summary = "; ".join(field_errors) if field_errors else "Validation failed"
+        return JSONResponse(
+            status_code=422,
+            content={
+                "message": operation,
+                "error": error_summary
+            }
+        )
 
     return JSONResponse(
         status_code=422,
         content={
             "detail": "Validation Failed",
-            "missing_or_invalid_fields": errors
+            "missing_or_invalid_fields": errors_list
         },
     )
 

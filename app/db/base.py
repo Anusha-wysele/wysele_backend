@@ -1,5 +1,6 @@
 from app.db.base_class import Base  # noqa
 from app.models.user import User  # noqa
+from app.models.user import UserToken  # noqa
 from app.models.log import Log  # noqa
 from app.models.audit import Audit  # noqa
 from app.models.contact import ContactInquiry  # noqa

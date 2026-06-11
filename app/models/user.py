@@ -50,3 +50,16 @@ class User(Base):
     @emp_id.setter
     def emp_id(self, value: str):
         self.employee_id = value
+
+
+class UserToken(Base):
+    __tablename__ = "user_tokens"
+
+    token = Column(String, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_type = Column(String, default="ACCESS")  # "ACCESS" or "REFRESH"
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")

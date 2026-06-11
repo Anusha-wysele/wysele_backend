@@ -20,8 +20,10 @@ class ApplicationCreate(BaseModel):
     @field_validator("mobileNumber")
     @classmethod
     def validate_mobile(cls, v: str) -> str:
-        if not re.fullmatch(r"\d{10}", v):
-            raise ValueError("mobileNumber must be exactly 10 digits")
+        if not v.isdigit():
+            raise ValueError("All integers should be used")
+        if len(v) != 10:
+            raise ValueError("Must be exactly 10 digits")
         return v
 
 
@@ -42,3 +44,8 @@ class ApplicationResponse(BaseModel):
     relevant_experience: str
     resume_url: str
     applied_at: datetime
+
+
+class ApplicationSuccess(BaseModel):
+    message: str = "Application submitted successfully"
+    application: ApplicationResponse

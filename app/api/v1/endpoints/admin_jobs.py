@@ -67,15 +67,6 @@ def get_all_applicants(
     return job_service.get_all_applicants(db)
 
 
-# ADMIN: Hard delete a job
-@router.delete("/job/{job_id}", status_code=204)
-def delete_job(
-    job_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_super_admin)
-):
-    job_service.delete_job(db, job_id, current_user.id, is_super_admin=True)
-
 
 # ADMIN: Get applicants for a specific job
 @router.get("/job/{job_id}/applicants", response_model=List[ApplicationResponse])

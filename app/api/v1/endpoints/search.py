@@ -43,11 +43,11 @@ def global_search(
         ]
 
         results["jobs"] = [
-            {"id": j.id, "role": j.role, "job_code": j.job_code,
+            {"id": j.id, "role": j.role, "title": j.title, "job_code": j.job_code,
              "location": j.location, "status": j.status}
             for j in db.query(Job).filter(
                 Job.is_deleted == False,
-                Job.role.ilike(keyword) | Job.location.ilike(keyword) |
+                Job.title.ilike(keyword) | Job.role.ilike(keyword) | Job.location.ilike(keyword) |
                 Job.region.ilike(keyword) | Job.job_code.ilike(keyword)
             ).all()
         ]
@@ -109,12 +109,12 @@ def global_search(
 
         # Admins can search their own company's jobs and applications
         results["jobs"] = [
-            {"id": j.id, "role": j.role, "job_code": j.job_code,
+            {"id": j.id, "role": j.role, "title": j.title, "job_code": j.job_code,
              "location": j.location, "status": j.status}
             for j in db.query(Job).filter(
                 Job.is_deleted == False,
                 Job.company_id == current_user.company_id,
-                (Job.role.ilike(keyword) | Job.location.ilike(keyword) |
+                (Job.title.ilike(keyword) | Job.role.ilike(keyword) | Job.location.ilike(keyword) |
                  Job.region.ilike(keyword) | Job.job_code.ilike(keyword))
             ).all()
         ]

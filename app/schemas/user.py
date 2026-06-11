@@ -22,6 +22,15 @@ def validate_strong_password(value: str) -> str:
     return value
 
 
+def validate_phone_number(v: Optional[str]) -> Optional[str]:
+    if v is not None and v != "":
+        if not v.isdigit():
+            raise ValueError("All integers should be used")
+        if len(v) != 10:
+            raise ValueError("Must be exactly 10 digits")
+    return v
+
+
 class UserRegister(BaseModel):
     emp_id: str = Field(..., description="Unique Employee ID (e.g., WYT0015)")
     email: EmailStr
@@ -38,15 +47,20 @@ class UserRegister(BaseModel):
         domain = v.split("@")[-1].lower()
         allowed_domains = {"wysele.com", "orbintix.com", "gracevirtue.com"}
         if domain not in allowed_domains:
-            raise ValueError("Email domain must be one of: @wysele.com, @orbintix.com, @gracevirtue.com")
+            raise ValueError("Please use your official company email address")
         return v
 
     @field_validator("role")
     @classmethod
     def validate_role(cls, v: str) -> str:
         if v not in ["SUPER_ADMIN", "ADMIN"]:
-            raise ValueError("Role must be SUPER_ADMIN or ADMIN")
+            raise ValueError("Role must be Admin or Super Admin")
         return v
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_reg_phone(cls, v: Optional[str]) -> Optional[str]:
+        return validate_phone_number(v)
 
     @field_validator("password")
     @classmethod
@@ -68,7 +82,7 @@ class UserRegister(BaseModel):
         
         expected_comp = expected_companies.get(email_domain)
         if expected_comp != company:
-            raise ValueError(f"Email domain '@{email_domain}' does not match company '{self.company_name}'")
+            raise ValueError("Email domain does not match the selected company")
             
         return self
 
@@ -83,6 +97,11 @@ class UserBase(BaseModel):
     phone_number: Optional[str] = None
     company_id: Optional[str] = None
     company_name: Optional[str] = None
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_base_phone(cls, v: Optional[str]) -> Optional[str]:
+        return validate_phone_number(v)
 
 
 class UserCreate(UserBase):
@@ -121,6 +140,11 @@ class UserUpdate(BaseModel):
     emp_id: Optional[str] = None
     company_id: Optional[str] = None
     company_name: Optional[str] = None
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_update_phone(cls, v: Optional[str]) -> Optional[str]:
+        return validate_phone_number(v)
 
 
 class PermissionsUpdate(BaseModel):

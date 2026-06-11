@@ -9,8 +9,9 @@ from app.core import security
 from app.core.config import settings
 from app.api.deps import get_db, get_current_user, get_current_super_admin
 from app.schemas.user import Token, LoginRequest, UserRegister, UserResponse, PasswordChange, PasswordResetRequest, PasswordReset, RefreshTokenRequest
-from app.models.user import User
+from app.models.user import User, UserToken
 from app.services.audit_service import log_audit_event
+import uuid
 
 router = APIRouter()
 
@@ -32,6 +33,30 @@ def generate_random_password(length: int = 12) -> str:
     password_list = list(upper + lower + digit + special + remaining)
     secrets.SystemRandom().shuffle(password_list)
     return "".join(password_list)
+
+
+def generate_tokens(db: Session, user_id: int) -> tuple[str, str]:
+    access_token_val = str(uuid.uuid4())
+    refresh_token_val = str(uuid.uuid4())
+    
+    # Store access token
+    db_access = UserToken(
+        token=access_token_val,
+        user_id=user_id,
+        token_type="ACCESS",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    # Store refresh token
+    db_refresh = UserToken(
+        token=refresh_token_val,
+        user_id=user_id,
+        token_type="REFRESH",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7)
+    )
+    db.add(db_access)
+    db.add(db_refresh)
+    db.commit()
+    return access_token_val, refresh_token_val
 
 
 @router.post("/login", response_model=Token)
@@ -60,21 +85,8 @@ def login(credentials: LoginRequest, response: Response, request: Request, db: S
         )
         raise HTTPException(status_code=403, detail="Account deactivated")
 
-    # Store claims in JWT token
-    claims = {
-        "sub": str(user.id),
-        "user_id": user.id,
-        "name": user.name or f"{user.first_name} {user.last_name}".strip(),
-        "email": user.email,
-        "role": user.role,
-        "company_id": user.company_id,
-        "company_name": user.company_name,
-        "emp_id": user.employee_id,
-        "is_active": user.is_active
-    }
-
-    access_token = security.create_access_token(data=claims)
-    refresh_token = security.create_refresh_token(data={"sub": str(user.id)})
+    # Generate and store UUID tokens in the database
+    access_token, refresh_token = generate_tokens(db, user.id)
     is_production = settings.ENVIRONMENT == "production"
 
     # Always set HttpOnly cookie
@@ -108,35 +120,30 @@ def login(credentials: LoginRequest, response: Response, request: Request, db: S
 
 @router.post("/refresh", response_model=Token)
 def refresh(body: RefreshTokenRequest, response: Response, db: Session = Depends(get_db)):
-    payload = security.decode_token(body.refresh_token)
-    if not payload or payload.get("type") != "refresh":
+    # Check the database for the active refresh token
+    db_refresh = db.query(UserToken).filter(
+        UserToken.token == body.refresh_token,
+        UserToken.token_type == "REFRESH",
+        UserToken.is_active == True,
+        UserToken.expires_at > datetime.now(timezone.utc)
+    ).first()
+
+    if not db_refresh:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid refresh token claims")
-
-    user = db.get(User, int(user_id))
+    user = db_refresh.user
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
 
-    claims = {
-        "sub": str(user.id),
-        "user_id": user.id,
-        "name": user.name or f"{user.first_name} {user.last_name}".strip(),
-        "email": user.email,
-        "role": user.role,
-        "company_id": user.company_id,
-        "company_name": user.company_name,
-        "emp_id": user.employee_id,
-        "is_active": user.is_active
-    }
+    # Invalidate/Deactivate all old tokens for this user
+    db.query(UserToken).filter(UserToken.user_id == user.id).update({"is_active": False})
+    db.commit()
 
-    new_access_token = security.create_access_token(data=claims)
-    new_refresh_token = security.create_refresh_token(data={"sub": str(user.id)})
+    # Generate new access/refresh tokens
+    new_access_token, new_refresh_token = generate_tokens(db, user.id)
     is_production = settings.ENVIRONMENT == "production"
 
     response.set_cookie(

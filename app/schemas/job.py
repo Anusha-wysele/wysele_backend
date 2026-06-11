@@ -15,9 +15,11 @@ class JobCreate(BaseModel):
     location: str
     region: str
     role: str
+    title: str
     salary: Optional[str] = None
     company_id: Optional[str] = None
     company_name: Optional[str] = None
+    status: Optional[str] = "ACTIVE"
 
 
 class JobUpdate(BaseModel):
@@ -30,9 +32,11 @@ class JobUpdate(BaseModel):
     location: Optional[str] = None
     region: Optional[str] = None
     role: Optional[str] = None
+    title: Optional[str] = None
     salary: Optional[str] = None
     company_id: Optional[str] = None
     company_name: Optional[str] = None
+    status: Optional[str] = None
 
 
 class JobResponse(BaseModel):
@@ -50,9 +54,15 @@ class JobResponse(BaseModel):
     location: str
     region: str
     role: str
+    title: str
     salary: Optional[str]
     status: str
     posted_by: int
     company_id: Optional[str]
     company_name: Optional[str]
     created_at: datetime
+
+
+class JobCreateSuccess(BaseModel):
+    message: str = "Job posted successfully"
+    job: JobResponse

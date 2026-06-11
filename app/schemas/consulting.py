@@ -36,8 +36,10 @@ class ConsultingCreate(BaseModel):
     @field_validator("mobile_number")
     @classmethod
     def validate_mobile(cls, v: str) -> str:
-        if not re.fullmatch(r"\d{10}", v):
-            raise ValueError("mobile_number must be exactly 10 digits")
+        if not v.isdigit():
+            raise ValueError("All integers should be used")
+        if len(v) != 10:
+            raise ValueError("Must be exactly 10 digits")
         return v
 
 

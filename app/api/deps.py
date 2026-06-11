@@ -1,8 +1,8 @@
 from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
-from app.core.security import decode_access_token
-from app.models.user import User
+from app.models.user import User, UserToken
+from datetime import datetime, timezone
 
 def get_db():
     db = SessionLocal()
@@ -30,16 +30,22 @@ async def get_current_user(
             detail="Not authenticated",
         )
 
-    # 3. Verify the JWT
-    user_id = decode_access_token(token)
-    if user_id is None:
+    # 3. Verify the access token in database
+    db_token = db.query(UserToken).filter(
+        UserToken.token == token,
+        UserToken.token_type == "ACCESS",
+        UserToken.is_active == True,
+        UserToken.expires_at > datetime.now(timezone.utc)
+    ).first()
+
+    if not db_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
         )
 
-    # 4. Find the user in DB by primary key — fastest possible lookup
-    user = db.get(User, int(user_id))
+    # 4. Get the user from the token relation
+    user = db_token.user
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 

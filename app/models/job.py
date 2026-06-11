@@ -20,6 +20,7 @@ class Job(Base):
     location = Column(String, nullable=False)
     region = Column(String, nullable=False)
     role = Column(String, nullable=False)
+    title = Column(String, nullable=False)
     salary = Column(String, nullable=True)
     status = Column(String, default="ACTIVE", nullable=False)
 
