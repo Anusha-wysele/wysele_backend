@@ -160,5 +160,5 @@ def normalize_company(company_input: str | None) -> tuple[str, str]:
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Company ID and Company Name should match"
+            detail="Company ID and Company Name should match (wysele, orbintix, gracevirtue)"
         )

@@ -10,7 +10,7 @@ import threading
 
 
 def auto_close_expired(job: Job) -> Job:
-    if job.status == "ACTIVE" and job.last_date_to_apply < date.today():
+    if job.status == "ACTIVE" and job.application_deadline < date.today():
         job.status = "CLOSED"
     return job
 
@@ -96,7 +96,7 @@ def delete_job(db: Session, job_id: int, current_user):
 def apply_for_job(db: Session, job_id: int, app_in: ApplicationCreate) -> Application:
     job = get_job_by_id(db, job_id)
 
-    if job.last_date_to_apply < date.today():
+    if job.application_deadline < date.today():
         raise HTTPException(status_code=400, detail="Job application deadline has expired")
 
     if job.status == "CLOSED":

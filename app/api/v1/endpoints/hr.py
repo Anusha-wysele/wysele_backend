@@ -48,8 +48,7 @@ def update_job(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_hr_or_admin)
 ):
-    is_super_admin = current_user.role == "SUPER_ADMIN"
-    return job_service.update_job(db, job_id, job_in, current_user.id, is_super_admin)
+    return job_service.update_job(db, job_id, job_in, current_user)
 
 
 # HR: Soft delete own job
@@ -59,8 +58,7 @@ def delete_job(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_hr_or_admin)
 ):
-    is_super_admin = current_user.role == "SUPER_ADMIN"
-    job_service.delete_job(db, job_id, current_user.id, is_super_admin)
+    job_service.delete_job(db, job_id, current_user)
 
 
 # HR: Get applicants for a specific job
