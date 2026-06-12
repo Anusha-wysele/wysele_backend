@@ -68,10 +68,10 @@ def login(credentials: LoginRequest, response: Response, request: Request, db: S
             db,
             action="LOGIN_FAILED",
             email=credentials.email,
-            details={"message": "Email does not exist"},
+            details={"message": "Email doesn't exist"},
             ip_address=request.client.host if request.client else None
         )
-        raise HTTPException(status_code=400, detail="Email does not exist")
+        raise HTTPException(status_code=400, detail="Email doesn't exist")
 
     # Verify password
     from app.core.security import verify_password
@@ -83,7 +83,7 @@ def login(credentials: LoginRequest, response: Response, request: Request, db: S
             details={"message": "Incorrect password"},
             ip_address=request.client.host if request.client else None
         )
-        raise HTTPException(status_code=400, detail="Incorrect Password")
+        raise HTTPException(status_code=400, detail="Incorrect password")
 
     # Verify role
     if user.role not in ["ADMIN", "SUPER_ADMIN"]:

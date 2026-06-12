@@ -95,38 +95,26 @@ async def db_exception_handler(request: Request, exc: SQLAlchemyError):
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    path = request.url.path
-    method = request.method
-    
-    operation = None
-    if method == "POST":
-        if "/jobs/apply" in path:
-            operation = "Job application failed"
-        elif "/jobs" in path:
-            operation = "Job posting failed"
-        elif "/blogs" in path:
-            operation = "Blog posting failed"
+    # Extract clean message and errors
+    err_msg = ""
+    err_list = None
+    if isinstance(exc.detail, dict):
+        err_msg = exc.detail.get("message", "An error occurred")
+        err_list = exc.detail.get("errors")
+    else:
+        err_msg = str(exc.detail)
 
-    if operation:
-        if isinstance(exc.detail, dict):
-            return JSONResponse(
-                status_code=exc.status_code,
-                content={
-                    "message": exc.detail.get("message"),
-                    "error": exc.detail.get("message"),
-                    "errors": exc.detail.get("errors")
-                }
-            )
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "message": exc.detail,
-                "error": exc.detail
-            }
-        )
+    content = {
+        "message": err_msg,
+        "error": err_msg,
+        "detail": err_msg
+    }
+    if err_list:
+        content["errors"] = err_list
+
     return JSONResponse(
         status_code=exc.status_code,
-        content={"detail": exc.detail}
+        content=content
     )
 
 @app.exception_handler(RequestValidationError)
@@ -167,35 +155,17 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "message": clean_msg
         })
 
-    path = request.url.path
-    method = request.method
+    error_summary = "; ".join(field_errors) if field_errors else "Validation failed"
     
-    operation = None
-    if method == "POST":
-        if "/jobs/apply" in path:
-            operation = "Job application failed"
-        elif "/jobs" in path:
-            operation = "Job posting failed"
-        elif "/blogs" in path:
-            operation = "Blog posting failed"
-
-    if operation:
-        error_summary = "; ".join(field_errors) if field_errors else "Validation failed"
-        return JSONResponse(
-            status_code=422,
-            content={
-                "message": error_summary,
-                "error": error_summary,
-                "errors": field_errors
-            }
-        )
-
     return JSONResponse(
         status_code=422,
         content={
-            "detail": "Validation Failed",
+            "message": error_summary,
+            "error": error_summary,
+            "detail": error_summary,
+            "errors": field_errors,
             "missing_or_invalid_fields": errors_list
-        },
+        }
     )
 
 @app.get("/", tags=["Health"])
