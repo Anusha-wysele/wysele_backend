@@ -20,14 +20,6 @@ class ConsultingCreate(BaseModel):
     message: Optional[str] = None
     company: Optional[str] = None
 
-    @field_validator("email")
-    @classmethod
-    def validate_business_email(cls, v: str) -> str:
-        domain = v.split("@")[-1].lower()
-        allowed = {"wysele.com", "orbintix.com", "gracevirtue.com"}
-        if domain not in allowed:
-            raise ValueError("Please use a business email address")
-        return v
 
     @field_validator("mobile_number")
     @classmethod
