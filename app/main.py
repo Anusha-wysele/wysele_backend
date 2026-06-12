@@ -18,6 +18,7 @@ from fastapi import Request
 from sqlalchemy.exc import SQLAlchemyError
 import logging
 import os
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -107,10 +108,19 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             operation = "Blog posting failed"
 
     if operation:
+        if isinstance(exc.detail, dict):
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={
+                    "message": exc.detail.get("message"),
+                    "error": exc.detail.get("message"),
+                    "errors": exc.detail.get("errors")
+                }
+            )
         return JSONResponse(
             status_code=exc.status_code,
             content={
-                "message": operation,
+                "message": exc.detail,
                 "error": exc.detail
             }
         )
@@ -128,19 +138,26 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         message = error.get("msg", "")
         err_type = error.get("type", "unknown")
         
+        # Convert field to user-friendly label
+        field_str = str(field)
+        s1 = re.sub('(.)([A-Z][a-z]+)', r'\1 \2', field_str)
+        s2 = re.sub('([a-z0-9])([A-Z])', r'\1 \2', s1)
+        field_label = s2.replace("_", " ").strip().title()
+        
         # Format a short, clear error message
-        if err_type == "missing":
-            clean_msg = "Field is required"
-        elif "int" in err_type or "decimal" in err_type or "float" in err_type:
-            clean_msg = "All integers should be used"
-        elif message.startswith("Value error, "):
-            clean_msg = message[len("Value error, "):]
-        elif message.startswith("Assertion failed, "):
-            clean_msg = message[len("Assertion failed, "):]
+        if err_type == "missing" or message == "Field required":
+            clean_msg = f"{field_label} is a required field"
+            field_errors.append(clean_msg)
         else:
-            clean_msg = message
-
-        field_errors.append(f"{field}: {clean_msg}")
+            if "int" in err_type or "decimal" in err_type or "float" in err_type:
+                clean_msg = "All integers should be used"
+            elif message.startswith("Value error, "):
+                clean_msg = message[len("Value error, "):]
+            elif message.startswith("Assertion failed, "):
+                clean_msg = message[len("Assertion failed, "):]
+            else:
+                clean_msg = message
+            field_errors.append(f"{field_label}: {clean_msg}")
         
         # Keep structured errors format as fallback/legacy format
         full_field_path = " -> ".join([str(loc) for loc in error["loc"] if loc != "body"])
@@ -167,8 +184,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         return JSONResponse(
             status_code=422,
             content={
-                "message": operation,
-                "error": error_summary
+                "message": error_summary,
+                "error": error_summary,
+                "errors": field_errors
             }
         )
 

@@ -130,14 +130,14 @@ def require_can_post_job(current_user: User = Depends(get_current_user)) -> User
     return current_user
 
 def require_can_access_contact(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role == "SUPER_ADMIN":
+    if current_user.role in ["ADMIN", "SUPER_ADMIN"]:
         return current_user
     if not current_user.can_access_contact:
         raise HTTPException(status_code=403, detail="You do not have permission to access contacts")
     return current_user
 
 def require_can_access_consulting(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role == "SUPER_ADMIN":
+    if current_user.role in ["ADMIN", "SUPER_ADMIN"]:
         return current_user
     if not current_user.can_access_consulting:
         raise HTTPException(status_code=403, detail="You do not have permission to access consulting")

@@ -17,6 +17,7 @@ from app.schemas.pagination import PaginatedResponse, paginate
 from app.services import job_service
 from app.services.email_service import send_otp_email
 from typing import List
+from pydantic import ValidationError
 
 router = APIRouter()
 
@@ -32,18 +33,19 @@ def _generate_otp() -> str:
 def send_application_otp(body: OTPRequest, background_tasks: BackgroundTasks, db: Session = Depends(deps.get_db)):
     otp = _generate_otp()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    email_lower = body.email.lower()
 
     db.query(EmailVerification).filter(
-        EmailVerification.email == body.email,
+        EmailVerification.email == email_lower,
         EmailVerification.purpose == PURPOSE,
         EmailVerification.is_verified == False
     ).delete()
     db.commit()
 
-    db.add(EmailVerification(email=body.email, otp=otp, purpose=PURPOSE, is_verified=False, expires_at=expires_at))
+    db.add(EmailVerification(email=email_lower, otp=otp, purpose=PURPOSE, is_verified=False, expires_at=expires_at))
     db.commit()
 
-    background_tasks.add_task(send_otp_email, email_to=body.email, otp=otp, purpose=PURPOSE)
+    background_tasks.add_task(send_otp_email, email_to=email_lower, otp=otp, purpose=PURPOSE)
     return {"message": "OTP sent to your email. It expires in 10 minutes."}
 
 
@@ -65,8 +67,9 @@ def apply_for_job(
     expectedCtc: str = Form(None),
     db: Session = Depends(deps.get_db)
 ):
+    email_lower = email.lower()
     record = db.query(EmailVerification).filter(
-        EmailVerification.email == email,
+        EmailVerification.email == email_lower,
         EmailVerification.purpose == PURPOSE,
         EmailVerification.is_verified == False,
         EmailVerification.otp == otp
@@ -88,19 +91,52 @@ def apply_for_job(
     encoded = base64.b64encode(content).decode()
     resume_data_url = f"data:application/{ext};base64,{encoded}"
 
-    app_in = ApplicationCreate(
-        firstName=firstName,
-        lastName=lastName,
-        email=email,
-        mobileNumber=mobileNumber,
-        currentLocation=currentLocation,
-        noticePeriod=noticePeriod,
-        releventExperience=releventExperience,
-        resume=resume_data_url,
-        region=region,
-        currentCtc=currentCtc,
-        expectedCtc=expectedCtc,
-    )
+    try:
+        app_in = ApplicationCreate(
+            firstName=firstName,
+            lastName=lastName,
+            email=email_lower,
+            mobileNumber=mobileNumber,
+            currentLocation=currentLocation,
+            noticePeriod=noticePeriod,
+            releventExperience=releventExperience,
+            resume=resume_data_url,
+            region=region,
+            currentCtc=currentCtc,
+            expectedCtc=expectedCtc,
+        )
+    except ValidationError as e:
+        import re
+        field_errors = []
+        for error in e.errors():
+            field = error["loc"][-1] if error["loc"] else "field"
+            message = error.get("msg", "")
+            err_type = error.get("type", "unknown")
+            
+            # Convert field to user-friendly label
+            field_str = str(field)
+            s1 = re.sub('(.)([A-Z][a-z]+)', r'\1 \2', field_str)
+            s2 = re.sub('([a-z0-9])([A-Z])', r'\1 \2', s1)
+            field_label = s2.replace("_", " ").strip().title()
+            
+            if err_type == "missing" or message == "Field required":
+                clean_msg = f"{field_label} is a required field"
+                field_errors.append(clean_msg)
+            else:
+                if message.startswith("Value error, "):
+                    clean_msg = message[len("Value error, "):]
+                else:
+                    clean_msg = message
+                field_errors.append(f"{field_label}: {clean_msg}")
+        error_summary = "; ".join(field_errors) if field_errors else "Validation failed"
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": error_summary,
+                "errors": field_errors
+            }
+        )
+
     result = job_service.apply_for_job(db, job_id, app_in)
     db.delete(record)
     db.commit()

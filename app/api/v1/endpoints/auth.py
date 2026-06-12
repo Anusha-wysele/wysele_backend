@@ -61,18 +61,40 @@ def generate_tokens(db: Session, user_id: int) -> tuple[str, str]:
 
 @router.post("/login", response_model=Token)
 def login(credentials: LoginRequest, response: Response, request: Request, db: Session = Depends(get_db)):
-    user = auth_service.authenticate(db, email=credentials.email, password=credentials.password)
-
-    if not user or user.role not in ["ADMIN", "SUPER_ADMIN"]:
-        # Log failed login attempt
+    # Find user by email (case-insensitive)
+    user = db.query(User).filter(User.email.ilike(credentials.email)).first()
+    if not user:
         log_audit_event(
             db,
             action="LOGIN_FAILED",
             email=credentials.email,
-            details={"message": "Invalid credentials or user not found"},
+            details={"message": "Email does not exist"},
             ip_address=request.client.host if request.client else None
         )
-        raise HTTPException(status_code=400, detail="Invalid credentials")
+        raise HTTPException(status_code=400, detail="Email does not exist")
+
+    # Verify password
+    from app.core.security import verify_password
+    if not verify_password(credentials.password, user.hashed_password):
+        log_audit_event(
+            db,
+            action="LOGIN_FAILED",
+            email=credentials.email,
+            details={"message": "Incorrect password"},
+            ip_address=request.client.host if request.client else None
+        )
+        raise HTTPException(status_code=400, detail="Incorrect Password")
+
+    # Verify role
+    if user.role not in ["ADMIN", "SUPER_ADMIN"]:
+        log_audit_event(
+            db,
+            action="LOGIN_FAILED",
+            email=credentials.email,
+            details={"message": "Unauthorized role"},
+            ip_address=request.client.host if request.client else None
+        )
+        raise HTTPException(status_code=400, detail="Unauthorized role")
 
     if not user.is_active:
         log_audit_event(

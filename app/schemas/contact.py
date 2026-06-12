@@ -19,7 +19,12 @@ class ContactCreate(BaseModel):
                 raise ValueError("Must be exactly 10 digits")
         return v
 
-class ContactResponse(ContactCreate):
+class ContactResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    full_name: str
+    email: EmailStr
+    phone_number: Optional[str] = None
+    location: Optional[str] = None
+    message: str
     created_at: datetime

@@ -102,9 +102,10 @@ def apply_for_job(db: Session, job_id: int, app_in: ApplicationCreate) -> Applic
     if job.status == "CLOSED":
         raise HTTPException(status_code=400, detail="This job is no longer accepting applications")
 
+    email_lower = app_in.email.lower()
     existing = db.query(Application).filter(
         Application.job_id == job_id,
-        Application.email == app_in.email
+        Application.email == email_lower
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="You have already applied for this job")
@@ -113,7 +114,7 @@ def apply_for_job(db: Session, job_id: int, app_in: ApplicationCreate) -> Applic
         job_id=job_id,
         first_name=app_in.firstName,
         last_name=app_in.lastName,
-        email=app_in.email,
+        email=email_lower,
         mobile_number=app_in.mobileNumber,
         current_location=app_in.currentLocation,
         region=app_in.region,

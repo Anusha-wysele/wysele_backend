@@ -31,11 +31,20 @@ class ConsultingCreate(BaseModel):
     @field_validator("mobile_number")
     @classmethod
     def validate_mobile(cls, v: str) -> str:
-        if not v.isdigit():
+        # Strip common formatting characters: spaces, hyphens, parentheses, plus signs
+        cleaned = re.sub(r"[\s\-\(\)\+]", "", v)
+        # Handle country code (+91 or 91) prefix for 12 digit numbers
+        if cleaned.startswith("91") and len(cleaned) == 12:
+            cleaned = cleaned[2:]
+        # Handle leading zero prefix for 11 digit numbers
+        elif cleaned.startswith("0") and len(cleaned) == 11:
+            cleaned = cleaned[1:]
+
+        if not cleaned.isdigit():
             raise ValueError("All integers should be used")
-        if len(v) != 10:
+        if len(cleaned) != 10:
             raise ValueError("Must be exactly 10 digits")
-        return v
+        return cleaned
 
 
 class ConsultingResponse(BaseModel):
