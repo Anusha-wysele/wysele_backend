@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
-from app.api.deps import get_db, get_current_super_admin
+from app.api.deps import get_db, get_current_super_admin, get_current_admin
 from app.models.user import User
 from app.schemas.user import UserResponse, UserUpdate, PermissionsUpdate, UserRegister
 from app.services.audit_service import log_audit_event
@@ -172,3 +172,56 @@ def toggle_status(
     )
 
     return user
+
+
+# GET dashboard stats
+@router.get("/dashboard/stats")
+def get_dashboard_stats(
+    request: Request,
+    company: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    from app.models.job import Job
+    from app.models.blog import Blog
+    from app.models.consulting import ConsultingInquiry
+    from app.models.contact import ContactInquiry
+    from app.api import deps
+
+    if current_user.role == "SUPER_ADMIN":
+        if company:
+            company_clean, _ = deps.normalize_company(company)
+        else:
+            detected = deps.detect_company_from_request(request)
+            if detected:
+                company_clean = detected
+            else:
+                company_clean = "wysele"
+    else:
+        company_clean, _ = deps.normalize_company(current_user.company_id)
+
+    jobs_count = db.query(Job).filter(
+        Job.company_id == company_clean,
+        Job.is_deleted == False
+    ).count()
+
+    blogs_count = db.query(Blog).join(
+        User, Blog.author_id == User.id
+    ).filter(
+        User.company_id == company_clean
+    ).count()
+
+    consulting_count = db.query(ConsultingInquiry).filter(
+        ConsultingInquiry.company == company_clean
+    ).count()
+
+    contact_count = db.query(ContactInquiry).filter(
+        ContactInquiry.company == company_clean
+    ).count()
+
+    return {
+        "total_jobs": jobs_count,
+        "blog_posts": blogs_count,
+        "consultations": consulting_count,
+        "contact_inquiries": contact_count
+    }

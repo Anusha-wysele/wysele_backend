@@ -18,6 +18,7 @@ class ConsultingCreate(BaseModel):
     mobile_number: str
     company_name: str
     message: Optional[str] = None
+    company: Optional[str] = None
 
     @field_validator("email")
     @classmethod
@@ -56,4 +57,5 @@ class ConsultingResponse(BaseModel):
     mobile_number: str
     company_name: str
     message: Optional[str]
+    company: Optional[str] = None
     created_at: datetime

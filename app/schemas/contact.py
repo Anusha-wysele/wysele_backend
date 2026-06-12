@@ -8,6 +8,7 @@ class ContactCreate(BaseModel):
     phone_number: Optional[str] = None
     location: Optional[str] = None
     message: str
+    company: Optional[str] = None
 
     @field_validator("phone_number")
     @classmethod
@@ -27,4 +28,5 @@ class ContactResponse(BaseModel):
     phone_number: Optional[str] = None
     location: Optional[str] = None
     message: str
+    company: Optional[str] = None
     created_at: datetime

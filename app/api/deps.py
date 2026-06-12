@@ -162,3 +162,18 @@ def normalize_company(company_input: str | None) -> tuple[str, str]:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Company ID and Company Name should match (wysele, orbintix, gracevirtue)"
         )
+
+
+def detect_company_from_request(request: Request) -> str | None:
+    origin = request.headers.get("origin") or ""
+    referer = request.headers.get("referer") or ""
+    
+    combined = (origin + " " + referer).lower()
+    
+    if "orbintix" in combined:
+        return "orbintix"
+    elif "grace" in combined or "virtue" in combined:
+        return "gracevirtue"
+    elif "wysele" in combined:
+        return "wysele"
+    return None

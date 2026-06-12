@@ -253,6 +253,7 @@ def search_jobs(
 # GET /jobs — Public Candidate or Multi-tenant Admin List
 @router.get("/", response_model=PaginatedResponse[JobResponse])
 def get_jobs(
+    request: Request,
     db: Session = Depends(deps.get_db),
     current_user: Optional[User] = Depends(get_current_user_optional),
     page: int = Query(default=1, ge=1),
@@ -275,6 +276,18 @@ def get_jobs(
     else:
         # Public Candidate list: view active jobs only
         query = query.filter(Job.status == "ACTIVE")
+
+        # Determine the company filter for public view: use query param or autodetect from request headers
+        target_company = company_id
+        if not target_company:
+            target_company = deps.detect_company_from_request(request)
+
+        if target_company:
+            try:
+                company_norm, _ = deps.normalize_company(target_company)
+                query = query.filter(Job.company_id == company_norm)
+            except Exception:
+                pass
 
     return paginate(query.order_by(Job.created_at.desc()), page, limit)
 

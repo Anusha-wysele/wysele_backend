@@ -11,4 +11,5 @@ class ContactInquiry(Base):
     phone_number = Column(String, nullable=True)
     location = Column(String, nullable=True)
     message = Column(Text, nullable=False)
+    company = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)

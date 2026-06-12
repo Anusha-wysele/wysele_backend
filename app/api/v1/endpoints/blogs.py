@@ -70,6 +70,8 @@ def create_blog(
 ):
     validate_image_url(blog_in.image_url)
     new_blog = Blog(**blog_in.model_dump())
+    new_blog.author_id = current_user.id
+    new_blog.author_name = current_user.name or f"{current_user.first_name} {current_user.last_name}"
     db.add(new_blog)
     db.commit()
     db.refresh(new_blog)
