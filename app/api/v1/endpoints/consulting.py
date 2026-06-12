@@ -14,7 +14,7 @@ router = APIRouter()
 def submit_consulting(request: Request, body: ConsultingCreate, db: Session = Depends(deps.get_db)):
     count = db.query(ConsultingInquiry).filter(ConsultingInquiry.email == body.email).count()
     if count >= 10:
-        raise HTTPException(status_code=400, detail="You have reached maximum limit of 10 submissions")
+        raise HTTPException(status_code=400, detail="You have reached the maximum limit of 10 submissions")
 
     company_val = None
     if body.company:
