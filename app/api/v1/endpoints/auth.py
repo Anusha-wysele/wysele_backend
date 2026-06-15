@@ -1,6 +1,6 @@
 import secrets
 import string
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Response, Request, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from app.services import auth_service
@@ -291,9 +291,38 @@ def forgot_password(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.email == body.email).first()
+    user = db.query(User).filter(User.email.ilike(body.email)).first()
     if not user:
-        return {"message": "If this email exists, a reset code has been sent"}
+        raise HTTPException(status_code=404, detail="Email does not exist")
+
+    # Enforce role restrictions with separate error messages
+    if body.role:
+        requested_role = body.role.upper()
+        if requested_role == "SUPER_ADMIN":
+            if user.role != "SUPER_ADMIN":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Password reset is only allowed for Super Admin accounts"
+                )
+        elif requested_role == "ADMIN":
+            if user.role != "ADMIN":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Password reset is only allowed for Admin accounts"
+                )
+        else:
+            if user.role not in ["ADMIN", "SUPER_ADMIN"]:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Password reset is only allowed for Admin and Super Admin accounts"
+                )
+    else:
+        # Fallback if no specific role is requested
+        if user.role not in ["ADMIN", "SUPER_ADMIN"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Password reset is only allowed for Admin and Super Admin accounts"
+            )
 
     # Generate a 6-digit secure numeric verification code (OTP)
     reset_token = f"{secrets.randbelow(1000000):06d}"
@@ -302,7 +331,7 @@ def forgot_password(
     db.commit()
 
     background_tasks.add_task(send_password_reset_email, email_to=user.email, reset_token=reset_token)
-    return {"message": "If this email exists, a reset code has been sent"}
+    return {"message": "Reset code has been sent successfully"}
 
 
 @router.post("/reset-password")

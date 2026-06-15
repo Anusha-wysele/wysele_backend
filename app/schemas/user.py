@@ -202,6 +202,7 @@ class PasswordChange(BaseModel):
 
 class PasswordResetRequest(BaseModel):
     email: EmailStr
+    role: Optional[str] = None
 
 
 class PasswordReset(BaseModel):
