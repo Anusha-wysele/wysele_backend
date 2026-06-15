@@ -144,36 +144,60 @@ def require_can_access_consulting(current_user: User = Depends(get_current_user)
     return current_user
 
 
-def normalize_company(company_input: str | None) -> tuple[str, str]:
+def normalize_company(company_input: str | None, db: Session = None) -> tuple[str, str]:
     if not company_input:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Company ID and Company Name should match (wysele, orbintix, gracevirtue)"
+            detail="Company ID and Company Name should match a registered company"
         )
+    
     clean = company_input.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
-    if "orbintix" in clean:
-        return "orbintix", "orbintix"
-    elif "grace" in clean or "virtue" in clean:
-        return "gracevirtue", "gracevirtue"
-    elif "wysele" in clean:
-        return "wysele", "wysele"
-    else:
+    
+    close_db = False
+    if not db:
+        from app.db.session import SessionLocal
+        db = SessionLocal()
+        close_db = True
+
+    try:
+        from app.models.company import Company
+        db_companies = db.query(Company).filter(Company.is_active == True).all()
+        
+        for c in db_companies:
+            c_id_clean = c.id.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+            c_name_clean = c.name.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+            if c_id_clean == clean or c_name_clean == clean or c_id_clean in clean or clean in c_id_clean:
+                return c.id, c.name
+                
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Company ID and Company Name should match (wysele, orbintix, gracevirtue)"
+            detail="Company ID and Company Name should match a registered company"
         )
+    finally:
+        if close_db:
+            db.close()
 
 
-def detect_company_from_request(request: Request) -> str | None:
+def detect_company_from_request(request: Request, db: Session = None) -> str | None:
     origin = request.headers.get("origin") or ""
     referer = request.headers.get("referer") or ""
     
     combined = (origin + " " + referer).lower()
     
-    if "orbintix" in combined:
-        return "orbintix"
-    elif "grace" in combined or "virtue" in combined:
-        return "gracevirtue"
-    elif "wysele" in combined:
-        return "wysele"
-    return None
+    close_db = False
+    if not db:
+        from app.db.session import SessionLocal
+        db = SessionLocal()
+        close_db = True
+
+    try:
+        from app.models.company import Company
+        db_companies = db.query(Company).filter(Company.is_active == True).all()
+        
+        for c in db_companies:
+            if c.domain.lower() in combined or c.id.lower() in combined:
+                return c.id
+        return None
+    finally:
+        if close_db:
+            db.close()

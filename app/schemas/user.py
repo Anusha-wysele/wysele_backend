@@ -44,7 +44,15 @@ class UserRegister(BaseModel):
     @classmethod
     def validate_business_email(cls, v: str) -> str:
         domain = v.split("@")[-1].lower()
-        allowed_domains = {"wysele.com", "orbintix.com", "gracevirtue.com"}
+        
+        from app.db.session import SessionLocal
+        from app.models.company import Company
+        db = SessionLocal()
+        try:
+            allowed_domains = {c.email_domain.lower() for c in db.query(Company).filter(Company.is_active == True).all()}
+        finally:
+            db.close()
+            
         if domain not in allowed_domains:
             raise ValueError("Please use your official company email address")
         return v
@@ -64,16 +72,28 @@ class UserRegister(BaseModel):
     @model_validator(mode="after")
     def validate_email_company_match(self) -> "UserRegister":
         email_domain = self.email.split("@")[-1].lower()
-        company = self.company_name.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+        company_clean = self.company_name.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
         
-        expected_companies = {
-            "wysele.com": "wysele",
-            "orbintix.com": "orbintix",
-            "gracevirtue.com": "gracevirtue"
-        }
+        from app.db.session import SessionLocal
+        from app.models.company import Company
+        db = SessionLocal()
+        try:
+            # Find the company that matches the email domain
+            c = db.query(Company).filter(
+                Company.email_domain == email_domain,
+                Company.is_active == True
+            ).first()
+        finally:
+            db.close()
+            
+        if not c:
+            raise ValueError("Email domain does not match any registered company")
+            
+        # Verify that the company_name input matches the found company's ID or Name
+        c_id_clean = c.id.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+        c_name_clean = c.name.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
         
-        expected_comp = expected_companies.get(email_domain)
-        if expected_comp != company:
+        if company_clean != c_id_clean and company_clean != c_name_clean and c_id_clean not in company_clean and company_clean not in c_id_clean:
             raise ValueError("Email domain does not match the selected company")
             
         return self

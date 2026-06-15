@@ -133,7 +133,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         field_label = s2.replace("_", " ").strip().title()
         
         # Format a short, clear error message
-        if err_type == "missing" or message == "Field required":
+        # If the field is missing or passed as None (null) for a non-nullable field, treat it as a required field error
+        if err_type == "missing" or message == "Field required" or error.get("input") is None:
             clean_msg = f"{field_label} is a required field"
             field_errors.append(clean_msg)
         else:

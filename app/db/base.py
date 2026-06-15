@@ -9,3 +9,4 @@ from app.models.job import Job  # noqa
 from app.models.application import Application  # noqa
 from app.models.consulting import ConsultingInquiry  # noqa
 from app.models.email_verification import EmailVerification  # noqa
+from app.models.company import Company  # noqa

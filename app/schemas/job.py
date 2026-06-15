@@ -37,24 +37,24 @@ class JobCreate(BaseModel):
 
 
 class JobUpdate(BaseModel):
-    job_title: Optional[str] = None
-    department: Optional[str] = None
-    employment_type: Optional[str] = None
-    work_mode: Optional[str] = None
-    experience: Optional[str] = None
-    openings: Optional[int] = None
-    location: Optional[str] = None
+    job_title: str = Field(default=None, min_length=1)
+    department: str = Field(default=None, min_length=1)
+    employment_type: str = Field(default=None, min_length=1)
+    work_mode: str = Field(default=None, min_length=1)
+    experience: str = Field(default=None, min_length=1)
+    openings: int = Field(default=None, ge=1)
+    location: str = Field(default=None, min_length=1)
     min_salary: Optional[int] = None
     max_salary: Optional[int] = None
-    description: Optional[str] = None
+    description: str = Field(default=None, min_length=1)
     responsibilities: Optional[List[str]] = None
-    required_skills: Optional[List[str]] = None
+    required_skills: List[str] = Field(default=None, min_length=1)
     qualification: Optional[str] = None
     application_email: Optional[str] = None
-    application_deadline: Optional[date] = None
-    role: Optional[str] = None
+    application_deadline: date = Field(default=None)
+    role: str = Field(default=None, min_length=1)
     company_id: Optional[str] = None
-    company_name: Optional[str] = None
+    company_name: str = Field(default=None, min_length=1)
     status: Optional[str] = None
 
     @field_validator("status")
