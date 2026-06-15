@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.api.deps import get_db, get_current_super_admin, get_current_admin
 from app.models.user import User
 from app.schemas.user import UserResponse, UserUpdate, PermissionsUpdate, UserRegister
@@ -12,10 +12,19 @@ router = APIRouter()
 # GET all admins (SUPER_ADMIN only)
 @router.get("/", response_model=List[UserResponse])
 def get_all_users(
+    is_active: Optional[bool] = Query(default=None, description="Filter by active status"),
+    role: Optional[str] = Query(default=None, description="Filter by role (ADMIN, SUPER_ADMIN)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin)
 ):
-    return db.query(User).filter(User.role.in_(["ADMIN", "SUPER_ADMIN"])).order_by(User.created_at.desc()).all()
+    query = db.query(User)
+    if is_active is not None:
+        query = query.filter(User.is_active == is_active)
+    if role:
+        query = query.filter(User.role == role.upper())
+    else:
+        query = query.filter(User.role.in_(["ADMIN", "SUPER_ADMIN"]))
+    return query.order_by(User.created_at.desc()).all()
 
 
 # POST create new admin (SUPER_ADMIN only)
