@@ -62,24 +62,20 @@ def update_company(
         raise HTTPException(status_code=404, detail="Company not found")
 
     update_data = company_in.model_dump(exclude_unset=True)
+    
+    # Prevent deactivating the last active company
+    if "is_active" in update_data and update_data["is_active"] is False:
+        if company.is_active:
+            active_count = db.query(Company).filter(Company.is_active == True).count()
+            if active_count <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="At least one company must remain active"
+                )
+
     for field, value in update_data.items():
         setattr(company, field, value)
 
     db.commit()
     db.refresh(company)
     return company
-
-@router.delete("/{company_id}")
-def delete_company(
-    company_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_super_admin)
-):
-    company = db.query(Company).filter(Company.id == company_id.lower()).first()
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-    
-    # Soft delete: mark is_active as False
-    company.is_active = False
-    db.commit()
-    return {"message": "Company deactivated successfully"}

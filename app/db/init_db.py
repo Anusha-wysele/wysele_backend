@@ -2,8 +2,26 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.user import User
 from app.core import security
+from app.models.company import Company
 
 def init_db(db: Session) -> None:
+    # 0. Seed default company (WYSELE) if none exist
+    if db.query(Company).count() == 0:
+        default_company = Company(
+            id="wysele",
+            name="WYSELE",
+            domain="wysele.com",
+            email_domain="wysele.com",
+            description="Wysele Consulting and Recruitment services.",
+            domain_link="https://wysele.com",
+            responsible_person="System Team",
+            address="Wysele Office, Bangalore",
+            documents=None
+        )
+        db.add(default_company)
+        db.commit()
+        print("[SUCCESS] Default company (wysele) seeded.")
+
     # 1. Search for the user defined in your .env
     user = db.query(User).filter(User.email == settings.FIRST_SUPERUSER).first()
     
