@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app.api.deps import get_db, get_current_super_admin
 from app.models.company import Company
@@ -47,8 +47,14 @@ def create_company(
     return new_company
 
 @router.get("/", response_model=List[CompanyResponse])
-def list_companies(db: Session = Depends(get_db)):
-    return db.query(Company).filter(Company.is_active == True).order_by(Company.company_name).all()
+def list_companies(
+    is_active: Optional[bool] = Query(default=None, description="Filter by active status"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Company)
+    if is_active is not None:
+        query = query.filter(Company.is_active == is_active)
+    return query.order_by(Company.company_name).all()
 
 @router.get("/{company_id}", response_model=CompanyResponse)
 def get_company(company_id: str, db: Session = Depends(get_db)):
