@@ -38,7 +38,6 @@ class UserRegister(BaseModel):
     phone_number: Optional[str] = None
     company_name: str = Field(..., description="WYSELE, ORBINTIX, or GRACE VIRTUE")
     role: str = Field(..., description="SUPER_ADMIN or ADMIN")
-    password: Optional[str] = None
     is_active: bool = True
 
     @field_validator("email")
@@ -61,13 +60,6 @@ class UserRegister(BaseModel):
     @classmethod
     def validate_reg_phone(cls, v: Optional[str]) -> Optional[str]:
         return validate_phone_number(v)
-
-    @field_validator("password")
-    @classmethod
-    def validate_password(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None:
-            return validate_strong_password(v)
-        return v
 
     @model_validator(mode="after")
     def validate_email_company_match(self) -> "UserRegister":
@@ -188,6 +180,7 @@ class PasswordResetRequest(BaseModel):
 
 
 class PasswordReset(BaseModel):
+    email: Optional[EmailStr] = None
     token: str
     new_password: str = Field(..., min_length=8)
 

@@ -115,17 +115,13 @@ def send_application_confirmation_email(email_to: str, first_name: str, job_code
 
 
 def send_password_reset_email(email_to: str, reset_token: str):
-    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
     html_content = f"""
     <html><body>
-        <h2>Password Reset</h2>
-        <p>Click the button below to reset your password. This link expires in 30 minutes.</p>
-        <a href="{reset_url}"
-           style="background-color: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-           Reset Password
-        </a>
-        <br><br>
-        <p>If you did not request this, ignore this email.</p>
+        <h2>Password Reset Code</h2>
+        <p>Use the verification code below to reset your password. This code expires in 30 minutes.</p>
+        <h1 style="letter-spacing: 8px; color: #dc3545; font-size: 32px; font-family: monospace;">{reset_token}</h1>
+        <br>
+        <p>If you did not request this, please ignore this email.</p>
         <p>Regards,<br>Wysele System Team</p>
         {LOGO_FOOTER}
     </body></html>

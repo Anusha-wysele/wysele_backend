@@ -214,8 +214,8 @@ def register_user(
     from app.api.deps import normalize_company
     company_id, company_name = normalize_company(user_in.company_name)
 
-    # Generate random password if not provided
-    temp_password = user_in.password or generate_random_password()
+    # Always auto-generate a secure random password
+    temp_password = generate_random_password()
 
     new_user = User(
         employee_id=user_in.emp_id,
@@ -293,31 +293,38 @@ def forgot_password(
 ):
     user = db.query(User).filter(User.email == body.email).first()
     if not user:
-        return {"message": "If this email exists, a reset link has been sent"}
+        return {"message": "If this email exists, a reset code has been sent"}
 
-    reset_token = secrets.token_urlsafe(32)
+    # Generate a 6-digit secure numeric verification code (OTP)
+    reset_token = f"{secrets.randbelow(1000000):06d}"
     user.reset_token = reset_token
     user.reset_token_expiry = datetime.now(timezone.utc) + timedelta(minutes=30)
     db.commit()
 
     background_tasks.add_task(send_password_reset_email, email_to=user.email, reset_token=reset_token)
-    return {"message": "If this email exists, a reset link has been sent"}
+    return {"message": "If this email exists, a reset code has been sent"}
 
 
 @router.post("/reset-password")
 def reset_password(body: PasswordReset, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.reset_token == body.token).first()
+    if body.email:
+        user = db.query(User).filter(
+            User.email.ilike(body.email),
+            User.reset_token == body.token
+        ).first()
+    else:
+        user = db.query(User).filter(User.reset_token == body.token).first()
 
     if not user:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code")
 
     reset_expiry = user.reset_token_expiry
     if reset_expiry:
         now = datetime.now(timezone.utc) if reset_expiry.tzinfo is not None else datetime.utcnow()
         if reset_expiry < now:
-            raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+            raise HTTPException(status_code=400, detail="Invalid or expired reset code")
     else:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code")
 
     user.hashed_password = security.get_password_hash(body.new_password)
     user.reset_token = None
