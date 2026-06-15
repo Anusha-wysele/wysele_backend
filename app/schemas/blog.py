@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 # Common properties
@@ -8,6 +8,7 @@ class BlogBase(BaseModel):
     content: str
     category: str
     image_url: Optional[str] = None
+    image_urls: Optional[List[str]] = []
     read_time: Optional[str] = "5 MIN READ"
     status: Optional[str] = "ACTIVE"
 
@@ -21,6 +22,7 @@ class BlogUpdate(BaseModel):
     content: Optional[str] = None
     category: Optional[str] = None
     image_url: Optional[str] = None
+    image_urls: Optional[List[str]] = None
     read_time: Optional[str] = None
     status: Optional[str] = None
 
