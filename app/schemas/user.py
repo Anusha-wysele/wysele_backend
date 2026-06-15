@@ -49,7 +49,11 @@ class UserRegister(BaseModel):
         from app.models.company import Company
         db = SessionLocal()
         try:
-            allowed_domains = {c.email_domain.lower() for c in db.query(Company).filter(Company.is_active == True).all()}
+            allowed_domains = {
+                c.company_email.split("@")[-1].lower()
+                for c in db.query(Company).filter(Company.is_active == True).all()
+                if c.company_email and "@" in c.company_email
+            }
         finally:
             db.close()
             
@@ -78,20 +82,21 @@ class UserRegister(BaseModel):
         from app.models.company import Company
         db = SessionLocal()
         try:
-            # Find the company that matches the email domain
-            c = db.query(Company).filter(
-                Company.email_domain == email_domain,
-                Company.is_active == True
-            ).first()
+            c = None
+            db_companies = db.query(Company).filter(Company.is_active == True).all()
+            for comp in db_companies:
+                if comp.company_email and "@" in comp.company_email:
+                    if comp.company_email.split("@")[-1].lower() == email_domain:
+                        c = comp
+                        break
         finally:
             db.close()
             
         if not c:
             raise ValueError("Email domain does not match any registered company")
             
-        # Verify that the company_name input matches the found company's ID or Name
         c_id_clean = c.id.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
-        c_name_clean = c.name.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+        c_name_clean = c.company_name.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
         
         if company_clean != c_id_clean and company_clean != c_name_clean and c_id_clean not in company_clean and company_clean not in c_id_clean:
             raise ValueError("Email domain does not match the selected company")

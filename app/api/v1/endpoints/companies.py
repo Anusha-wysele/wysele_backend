@@ -15,8 +15,15 @@ def create_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin)
 ):
-    comp_id = company_in.id.strip().lower()
-    
+    if company_in.id:
+        comp_id = company_in.id.strip().lower()
+    else:
+        # Generate ID from company_name
+        comp_id = company_in.company_name.strip().lower().replace(" ", "-")
+        comp_id = "".join(c for c in comp_id if c.isalnum() or c in ("-", "_"))
+        if not comp_id:
+            comp_id = "company"
+
     # Check if company already exists
     existing = db.query(Company).filter(Company.id == comp_id).first()
     if existing:
@@ -24,12 +31,12 @@ def create_company(
 
     new_company = Company(
         id=comp_id,
-        name=company_in.name,
-        domain=company_in.domain,
-        email_domain=company_in.email_domain,
+        company_name=company_in.company_name,
+        company_type=company_in.company_type,
+        company_email=company_in.company_email,
         description=company_in.description,
-        domain_link=company_in.domain_link,
-        responsible_person=company_in.responsible_person,
+        website_url=company_in.website_url,
+        company_representative=company_in.company_representative,
         documents=company_in.documents,
         address=company_in.address,
         is_active=company_in.is_active if company_in.is_active is not None else True
@@ -41,7 +48,7 @@ def create_company(
 
 @router.get("/", response_model=List[CompanyResponse])
 def list_companies(db: Session = Depends(get_db)):
-    return db.query(Company).filter(Company.is_active == True).order_by(Company.name).all()
+    return db.query(Company).filter(Company.is_active == True).order_by(Company.company_name).all()
 
 @router.get("/{company_id}", response_model=CompanyResponse)
 def get_company(company_id: str, db: Session = Depends(get_db)):

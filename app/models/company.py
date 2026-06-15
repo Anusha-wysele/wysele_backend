@@ -6,12 +6,12 @@ class Company(Base):
     __tablename__ = "companies"
 
     id = Column(String, primary_key=True, index=True) # lowercase identifier, e.g. 'wysele'
-    name = Column(String, nullable=False)
-    domain = Column(String, nullable=False)
-    email_domain = Column(String, nullable=False)
+    company_name = Column(String, nullable=False)
+    company_type = Column(String, nullable=False)
+    company_email = Column(String, nullable=False)
     description = Column(String, nullable=False)
-    domain_link = Column(String, nullable=False)
-    responsible_person = Column(String, nullable=False)
+    website_url = Column(String, nullable=False)
+    company_representative = Column(String, nullable=False)
     documents = Column(String, nullable=True) # Optional documents list or URL
     address = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)

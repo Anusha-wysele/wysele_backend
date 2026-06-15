@@ -9,14 +9,15 @@ def init_db(db: Session) -> None:
     if db.query(Company).count() == 0:
         default_company = Company(
             id="wysele",
-            name="WYSELE",
-            domain="wysele.com",
-            email_domain="wysele.com",
+            company_name="WYSELE",
+            company_type="Pvt Ltd",
+            company_email="contact@wysele.com",
             description="Wysele Consulting and Recruitment services.",
-            domain_link="https://wysele.com",
-            responsible_person="System Team",
+            website_url="https://wysele.com",
+            company_representative="System Team",
             address="Wysele Office, Bangalore",
-            documents=None
+            documents=None,
+            is_active=True
         )
         db.add(default_company)
         db.commit()

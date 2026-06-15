@@ -3,29 +3,29 @@ from typing import Optional
 from datetime import datetime
 
 class CompanyBase(BaseModel):
-    name: str = Field(..., min_length=1)
-    domain: str = Field(..., min_length=1)
-    email_domain: str = Field(..., min_length=1)
+    company_name: str = Field(..., min_length=1)
+    company_type: str = Field(..., min_length=1)
+    company_email: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)
-    domain_link: str = Field(..., min_length=1)
-    responsible_person: str = Field(..., min_length=1)
+    website_url: str = Field(..., min_length=1)
+    company_representative: str = Field(..., min_length=1)
     documents: Optional[str] = None
     address: str = Field(..., min_length=1)
     is_active: Optional[bool] = True
 
 class CompanyCreate(CompanyBase):
-    id: str = Field(..., min_length=1, pattern="^[a-z0-9_-]+$", description="Lowercase unique identifier, e.g. 'wysele'")
+    id: Optional[str] = Field(None, pattern="^[a-z0-9_-]+$", description="Optional lowercase unique identifier, e.g. 'wysele'")
 
 class CompanyUpdate(BaseModel):
-    name: str = Field(default=None, min_length=1)
-    domain: str = Field(default=None, min_length=1)
-    email_domain: str = Field(default=None, min_length=1)
-    description: str = Field(default=None, min_length=1)
-    domain_link: str = Field(default=None, min_length=1)
-    responsible_person: str = Field(default=None, min_length=1)
+    company_name: Optional[str] = Field(default=None, min_length=1)
+    company_type: Optional[str] = Field(default=None, min_length=1)
+    company_email: Optional[str] = Field(default=None, min_length=1)
+    description: Optional[str] = Field(default=None, min_length=1)
+    website_url: Optional[str] = Field(default=None, min_length=1)
+    company_representative: Optional[str] = Field(default=None, min_length=1)
     documents: Optional[str] = None
-    address: str = Field(default=None, min_length=1)
-    is_active: bool = Field(default=None)
+    address: Optional[str] = Field(default=None, min_length=1)
+    is_active: Optional[bool] = Field(default=None)
 
 class CompanyResponse(CompanyBase):
     id: str
