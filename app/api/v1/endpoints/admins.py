@@ -151,8 +151,8 @@ def update_permissions(
 @router.patch("/{user_id}/status", response_model=UserResponse)
 def toggle_status(
     user_id: int,
-    is_active: bool,
     request: Request,
+    is_active: bool = Query(True),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin)
 ):
